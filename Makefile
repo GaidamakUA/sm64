@@ -11,6 +11,8 @@ default: all
 
 # Version of the game to build
 VERSION ?= us
+# A language patch version
+LANG_PATCH ?= none
 # Graphics microcode used
 GRUCODE ?= f3d_old
 # If COMPARE is 1, check the output sha1sum when building 'all'
@@ -47,6 +49,13 @@ else
   $(error unknown version "$(VERSION)")
 endif
 endif
+endif
+
+# Lang patch
+
+ifeq ($(LANG_PATCH),uk)
+  $(info Applying Ukrainian lang patch!)
+  VERSION_CFLAGS := $(VERSION_CFLAGS) -DUK_PATCH
 endif
 
 # Microcode

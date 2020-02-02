@@ -490,6 +490,7 @@ ALIGNED8 static const u8 texture_font_char_jp_Z[] = {
 #include "textures/segment2/segment2.07330.ia1.inc.c"
 };
 
+// UK - --
 ALIGNED8 static const u8 texture_font_char_jp_long_vowel[] = {
 #include "textures/segment2/segment2.07340.ia1.inc.c"
 };
@@ -502,6 +503,7 @@ ALIGNED8 static const u8 texture_font_char_jp_dakuten[] = {
 #include "textures/segment2/segment2.07360.ia1.inc.c"
 };
 
+// UK - .
 ALIGNED8 static const u8 texture_font_char_jp_handakuten[] = {
 #include "textures/segment2/segment2.07370.ia1.inc.c"
 };
@@ -546,186 +548,233 @@ ALIGNED8 static const u8 texture_font_char_jp_star_hollow[] = {
 #include "textures/segment2/segment2.07410.ia1.inc.c"
 };
 
+// UK - А
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_a[] = {
 #include "textures/segment2/segment2.07420.ia1.inc.c"
 };
 
+// UK - Б
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_i[] = {
 #include "textures/segment2/segment2.07430.ia1.inc.c"
 };
 
+// UK - В
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_u[] = {
 #include "textures/segment2/segment2.07440.ia1.inc.c"
 };
 
+// UK - Г
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_c[] = {
 #include "textures/segment2/segment2.07450.ia1.inc.c"
 };
 
+// UK - Ґ
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_o[] = {
 #include "textures/segment2/segment2.07460.ia1.inc.c"
 };
 
+// UK - Д
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_ka[] = {
 #include "textures/segment2/segment2.07470.ia1.inc.c"
 };
 
+// UK - Е
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_ki[] = {
 #include "textures/segment2/segment2.07480.ia1.inc.c"
 };
 
+// UK - Є
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_ku[] = {
 #include "textures/segment2/segment2.07490.ia1.inc.c"
 };
 
+// UK - Ж
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_ke[] = {
 #include "textures/segment2/segment2.074A0.ia1.inc.c"
 };
 
+// UK - З
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_ko[] = {
 #include "textures/segment2/segment2.074B0.ia1.inc.c"
 };
 
+// UK - И
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_sa[] = {
 #include "textures/segment2/segment2.074C0.ia1.inc.c"
 };
 
+// UK - І
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_shi[] = {
 #include "textures/segment2/segment2.074D0.ia1.inc.c"
 };
 
+// UK - Ї
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_su[] = {
 #include "textures/segment2/segment2.074E0.ia1.inc.c"
 };
 
+// UK - Й
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_se[] = {
 #include "textures/segment2/segment2.074F0.ia1.inc.c"
 };
 
+// UK - К
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_so[] = {
 #include "textures/segment2/segment2.07500.ia1.inc.c"
 };
 
+// UK - Л
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_ta[] = {
 #include "textures/segment2/segment2.07510.ia1.inc.c"
 };
 
+// UK - М
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_chi[] = {
 #include "textures/segment2/segment2.07520.ia1.inc.c"
 };
 
+// UK - Н
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_tsu[] = {
 #include "textures/segment2/segment2.07530.ia1.inc.c"
 };
 
+// UK - О
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_te[] = {
 #include "textures/segment2/segment2.07540.ia1.inc.c"
 };
 
+// UK - П
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_to[] = {
 #include "textures/segment2/segment2.07550.ia1.inc.c"
 };
 
+// UK - Р
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_na[] = {
 #include "textures/segment2/segment2.07560.ia1.inc.c"
 };
 
+// UK - С
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_ni[] = {
 #include "textures/segment2/segment2.07570.ia1.inc.c"
 };
 
+// UK - Т
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_nu[] = {
 #include "textures/segment2/segment2.07580.ia1.inc.c"
 };
 
+// UK - У
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_ne[] = {
 #include "textures/segment2/segment2.07590.ia1.inc.c"
 };
 
+// UK - Ф
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_no[] = {
 #include "textures/segment2/segment2.075A0.ia1.inc.c"
 };
 
+// UK - Х
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_ha[] = {
 #include "textures/segment2/segment2.075B0.ia1.inc.c"
 };
 
+// UK - Ц
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_hi[] = {
 #include "textures/segment2/segment2.075C0.ia1.inc.c"
 };
 
+// UK - Ч
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_hu[] = {
 #include "textures/segment2/segment2.075D0.ia1.inc.c"
 };
 
+// UK - Ш
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_he[] = {
 #include "textures/segment2/segment2.075E0.ia1.inc.c"
 };
 
+// UK - Щ
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_ho[] = {
 #include "textures/segment2/segment2.075F0.ia1.inc.c"
 };
 
+// UK - Ь
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_ma[] = {
 #include "textures/segment2/segment2.07600.ia1.inc.c"
 };
 
+// UK - Ю
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_mi[] = {
 #include "textures/segment2/segment2.07610.ia1.inc.c"
 };
 
+// UK - Я
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_mu[] = {
 #include "textures/segment2/segment2.07620.ia1.inc.c"
 };
 
+// малі літери
+// UK - а
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_me[] = {
 #include "textures/segment2/segment2.07630.ia1.inc.c"
 };
 
+// UK - б
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_mo[] = {
 #include "textures/segment2/segment2.07640.ia1.inc.c"
 };
 
+// UK - в
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_ya[] = {
 #include "textures/segment2/segment2.07650.ia1.inc.c"
 };
 
+// UK - г
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_yu[] = {
 #include "textures/segment2/segment2.07660.ia1.inc.c"
 };
 
+// UK - ґ
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_yo[] = {
 #include "textures/segment2/segment2.07670.ia1.inc.c"
 };
 
+// UK - д
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_ra[] = {
 #include "textures/segment2/segment2.07680.ia1.inc.c"
 };
 
+// UK - е
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_ri[] = {
 #include "textures/segment2/segment2.07690.ia1.inc.c"
 };
 
+// UK - є
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_ru[] = {
 #include "textures/segment2/segment2.076A0.ia1.inc.c"
 };
 
+// UK - ж
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_re[] = {
 #include "textures/segment2/segment2.076B0.ia1.inc.c"
 };
 
+// UK - з
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_ro[] = {
 #include "textures/segment2/segment2.076C0.ia1.inc.c"
 };
 
+// UK - и
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_wa[] = {
 #include "textures/segment2/segment2.076D0.ia1.inc.c"
 };
 
+// UK - і
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_wo[] = {
 #include "textures/segment2/segment2.076E0.ia1.inc.c"
 };
 
+// UK - ї
 ALIGNED8 static const u8 texture_font_char_jp_hiragana_n[] = {
 #include "textures/segment2/segment2.076F0.ia1.inc.c"
 };
@@ -766,102 +815,128 @@ ALIGNED8 static const u8 texture_font_char_jp_hiragana_small_u[] = {
 #include "textures/segment2/segment2.07780.ia1.inc.c"
 };
 
+
 ALIGNED8 static const u8 texture_font_char_jp_interpunct[] = {
 #include "textures/segment2/segment2.07790.ia1.inc.c"
 };
 
+
+// UK - ,
 ALIGNED8 static const u8 texture_font_char_jp_comma[] = {
 #include "textures/segment2/segment2.077A0.ia1.inc.c"
 };
 
+// UK - й
 ALIGNED8 static const u8 texture_font_char_jp_katakana_a[] = {
 #include "textures/segment2/segment2.077B0.ia1.inc.c"
 };
 
+// UK - к
 ALIGNED8 static const u8 texture_font_char_jp_katakana_i[] = {
 #include "textures/segment2/segment2.077C0.ia1.inc.c"
 };
 
+// UK - л
 ALIGNED8 static const u8 texture_font_char_jp_katakana_u[] = {
 #include "textures/segment2/segment2.077D0.ia1.inc.c"
 };
 
+// UK - м
 ALIGNED8 static const u8 texture_font_char_jp_katakana_e[] = {
 #include "textures/segment2/segment2.077E0.ia1.inc.c"
 };
 
+// UK - н
 ALIGNED8 static const u8 texture_font_char_jp_katakana_o[] = {
 #include "textures/segment2/segment2.077F0.ia1.inc.c"
 };
 
+// UK - о
 ALIGNED8 static const u8 texture_font_char_jp_katakana_ka[] = {
 #include "textures/segment2/segment2.07800.ia1.inc.c"
 };
 
+// UK - п
 ALIGNED8 static const u8 texture_font_char_jp_katakana_ki[] = {
 #include "textures/segment2/segment2.07810.ia1.inc.c"
 };
 
+// UK - р
 ALIGNED8 static const u8 texture_font_char_jp_katakana_ku[] = {
 #include "textures/segment2/segment2.07820.ia1.inc.c"
 };
 
+// UK - с
 ALIGNED8 static const u8 texture_font_char_jp_katakana_ke[] = {
 #include "textures/segment2/segment2.07830.ia1.inc.c"
 };
 
+// UK - т
 ALIGNED8 static const u8 texture_font_char_jp_katakana_ko[] = {
 #include "textures/segment2/segment2.07840.ia1.inc.c"
 };
 
+// UK - у
 ALIGNED8 static const u8 texture_font_char_jp_katakana_sa[] = {
 #include "textures/segment2/segment2.07850.ia1.inc.c"
 };
 
+// UK - ф
 ALIGNED8 static const u8 texture_font_char_jp_katakana_shi[] = {
 #include "textures/segment2/segment2.07860.ia1.inc.c"
 };
 
+// UK - х
 ALIGNED8 static const u8 texture_font_char_jp_katakana_su[] = {
 #include "textures/segment2/segment2.07870.ia1.inc.c"
 };
 
+// UK - ц
 ALIGNED8 static const u8 texture_font_char_jp_katakana_se[] = {
 #include "textures/segment2/segment2.07880.ia1.inc.c"
 };
 
+// UK - ч
 ALIGNED8 static const u8 texture_font_char_jp_katakana_so[] = {
 #include "textures/segment2/segment2.07890.ia1.inc.c"
 };
 
+// UK - ш
 ALIGNED8 static const u8 texture_font_char_jp_katakana_ta[] = {
 #include "textures/segment2/segment2.078A0.ia1.inc.c"
 };
 
+// UK - щ
 ALIGNED8 static const u8 texture_font_char_jp_katakana_chi[] = {
 #include "textures/segment2/segment2.078B0.ia1.inc.c"
 };
 
+// UK - ь
 ALIGNED8 static const u8 texture_font_char_jp_katakana_tsu[] = {
 #include "textures/segment2/segment2.078C0.ia1.inc.c"
 };
 
+// UK - ю
 ALIGNED8 static const u8 texture_font_char_jp_katakana_te[] = {
 #include "textures/segment2/segment2.078D0.ia1.inc.c"
 };
 
+// UK - я
 ALIGNED8 static const u8 texture_font_char_jp_katakana_to[] = {
 #include "textures/segment2/segment2.078E0.ia1.inc.c"
 };
 
+// UK - '
 ALIGNED8 static const u8 texture_font_char_jp_katakana_na[] = {
 #include "textures/segment2/segment2.078F0.ia1.inc.c"
 };
 
+// UK - :
 ALIGNED8 static const u8 texture_font_char_jp_katakana_ni[] = {
 #include "textures/segment2/segment2.07900.ia1.inc.c"
 };
 
+// UK - .
 ALIGNED8 static const u8 texture_font_char_jp_katakana_nu[] = {
 #include "textures/segment2/segment2.07910.ia1.inc.c"
 };

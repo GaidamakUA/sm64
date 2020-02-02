@@ -96,6 +96,43 @@ u8 gDialogCharWidths[256] = { // TODO: Is there a way to auto generate this?
 #endif
     0,  0,  5,  7,  7,  6,  6,  8,  0,  8, 10,  6,  4, 10,  0,  0
 };
+#else
+#ifdef UK_PATCH
+//  0   1   2   3   4   5   6   7   8   9   A   B   C   D   E   F
+//  G   H   I   J   K   L   M   N   O   P   Q   R   S   T   U   V
+//  W   X   Y   Z   a   b   c   d   e   f   g   h   i   j   k   l
+//  m   n   o   p   q   r   s   t   u   v   w   x   y   z   _   _
+//
+//  А   Б   В   Г   Ґ   Д   Е   Є   Ж   З   И   І   Ї   Й   К   Л
+//  М   Н   О   П   Р   С   Т   У   Ф   Х   Ц   Ч   Ш   Щ   Ь   Ю
+//  Я   а   б   в   г   ґ   д   е   є   ж   з   и   і   ї   _   ,
+//  й   к   л   м   н   о   п   р   с   т   у   ф   х   ц   ч   ш
+//  щ   ь   ю   я   '   :   .   _   _   _   _   _   _   _   _   _
+//  _   _   _   _   _   _   _   _   _   _   _   _   _   _  ' '  -
+//  _   _   _   _   _   _   _   _   _   _   _   _   _   _   _   _
+// ...
+//  _   _   !   _   _   _   _   _   _   _   _   _   _   _   _   _
+u8 gDialogCharWidths[256] = {
+    10,  7,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  8,  8,
+    9,  8,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,
+    9,  9,  9,  9,  9,  9,  8,  8,  9,  9,  9,  9,  9,  9,  9,  9,
+    9,  8,  9,  9,  9,  9,  8,  8,  9,  9,  9,  9,  9,  9,  9,  9,
+
+    7,  7,  7,  7,  7,  7,  6,  7,  9,  7,  8,  5,  5,  8,  6,  7,
+    8,  6,  6,  8,  6,  6,  6,  6,  8,  7,  8,  6,  8,  9,  6,  9,
+    8,  6,  6,  5,  5,  5,  7,  5,  5,  8,  5,  6,  4,  4,  0,  3,
+    6,  6,  6,  7,  6,  5,  7,  5,  5,  6,  5,  6,  6,  6,  5,  7,
+    8,  5,  8,  5,  3,  3,  3,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  4,  9,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  6,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+};
+// u8 gDialogCharWidthsUkOffset = 0x40;
+#endif
 #endif
 
 s8 gDialogBoxState = DIALOG_STATE_OPENING;
@@ -511,7 +548,11 @@ void print_generic_string(s16 x, s16 y, const u8 *str) {
                 }
 
 #ifdef VERSION_JP
-                create_dl_translation_matrix(MENU_MTX_NOPUSH, 10.0f, 0.0f, 0.0f);
+#ifdef UK_PATCH
+                create_dl_translation_matrix(MENU_MTX_NOPUSH, (f32)(gDialogCharWidths[str[strPos]]), 0.0f, 0.0f);
+#else
+                create_dl_translation_matrix(MENU_MTX_NOPUSH, 8.0f, 0.0f, 0.0f);
+#endif
 #else
                 create_dl_translation_matrix(MENU_MTX_NOPUSH, (f32)(gDialogCharWidths[str[strPos]]), 0.0f, 0.0f);
                 break; // what an odd difference. US added a useless break here.
@@ -950,6 +991,7 @@ void reset_dialog_render_state(void) {
 }
 
 #ifdef VERSION_JP
+// Dialog box text offset
 #define X_VAL1 -5.0f
 #define Y_VAL1 2.0
 #define Y_VAL2 4.0f
@@ -1239,6 +1281,9 @@ void handle_dialog_text_and_pages(s8 colorMode, struct DialogEntry *dialog, s8 l
 #ifndef VERSION_EU
     s16 linePos = 0;
 #endif
+#ifdef UK_PATCH
+    s16 DialogX = 0;
+#endif
 
     if (gDialogBoxState == DIALOG_STATE_HORIZONTAL) {
         // If scrolling, consider the number of lines for both
@@ -1288,6 +1333,9 @@ void handle_dialog_text_and_pages(s8 colorMode, struct DialogEntry *dialog, s8 l
                 gDialogX = 0;
 #else
                 handle_dialog_scroll_page_state(lineNum, totalLines, &pageState, &xMatrix, &linePos);
+#ifdef UK_PATCH
+                DialogX = 0;
+#endif
 #endif
                 break;
 #ifdef VERSION_EU
@@ -1347,21 +1395,27 @@ void handle_dialog_text_and_pages(s8 colorMode, struct DialogEntry *dialog, s8 l
 #ifdef VERSION_EU
                 gDialogX += gDialogCharWidths[DIALOG_CHAR_SPACE];
 #else
-#ifdef VERSION_JP
+#if defined(VERSION_JP) && !defined(UK_PATCH)
                 if (linePos != 0) {
 #endif
                     xMatrix++;
-#ifdef VERSION_JP
+#if defined(VERSION_JP) && !defined(UK_PATCH)
                 }
+#endif
+#if defined(VERSION_JP) && defined(UK_PATCH)
+                create_dl_translation_matrix(MENU_MTX_NOPUSH, (f32)(gDialogCharWidths[DIALOG_CHAR_SPACE]), 0.0f, 0.0f);
+                DialogX += gDialogCharWidths[DIALOG_CHAR_SPACE];
 #endif
                 linePos++;
 
 #endif
                 break;
 #ifdef VERSION_JP
+#ifndef UK_PATCH
             case DIALOG_CHAR_PERIOD:
                 adjust_pos_and_print_period_char(&xMatrix, &linePos);
                 break;
+#endif
 #else
             case DIALOG_CHAR_SLASH:
 #ifdef VERSION_EU
@@ -1393,6 +1447,7 @@ void handle_dialog_text_and_pages(s8 colorMode, struct DialogEntry *dialog, s8 l
                 render_star_count_dialog_text(dialog, &xMatrix);
 #else
                 render_star_count_dialog_text(&xMatrix, &linePos);
+                // DO WE NEED TO INCREASE THE DialogX for UK_PATCH here?
 #endif
                 break;
 #ifdef VERSION_EU
@@ -1403,6 +1458,35 @@ void handle_dialog_text_and_pages(s8 colorMode, struct DialogEntry *dialog, s8 l
 #endif
             default: // any other character
 #ifdef VERSION_JP
+                #ifdef UK_PATCH
+                // ***
+                // MAX LINE WIDTH ~ 125
+                // ***
+
+                // if (linePos || xMatrix != 1) {
+                //     // charWidth = gDialogCharWidths[strChar];
+                //     charWidth = gDialogCharWidths[str[strIdx - 1]];
+                //     create_dl_translation_matrix(MENU_MTX_NOPUSH, (f32)(charWidth), 0, 0);
+                // }
+
+
+                // DIALOG_MARK_DAKUTEN or DIALOG_MARK_HANDAKUTEN
+                if (mark != 0) {
+                    create_dl_translation_matrix(MENU_MTX_PUSH, 5.0f, 7.0f, 0);
+
+                    render_generic_char(mark + 0xEF);
+                    gSPPopMatrix(gDisplayListHead++, G_MTX_MODELVIEW);
+                    mark = 0;
+                } else {
+                    render_generic_char(strChar);
+
+                    create_dl_translation_matrix(MENU_MTX_NOPUSH, (f32)(gDialogCharWidths[strChar]), 0.0f, 0.0f);
+                    DialogX += gDialogCharWidths[strChar];
+                }
+
+                xMatrix = 1;
+                linePos++;
+                #else
                 if (linePos != 0) {
                     create_dl_translation_matrix(MENU_MTX_NOPUSH, xMatrix * 10, 0, 0);
                 }
@@ -1411,12 +1495,16 @@ void handle_dialog_text_and_pages(s8 colorMode, struct DialogEntry *dialog, s8 l
                 xMatrix = 1;
                 linePos++;
 
+                // DIALOG_MARK_DAKUTEN or DIALOG_MARK_HANDAKUTEN
                 if (mark != 0) {
                     create_dl_translation_matrix(MENU_MTX_PUSH, 5.0f, 7.0f, 0);
+
                     render_generic_char(mark + 0xEF);
                     gSPPopMatrix(gDisplayListHead++, G_MTX_MODELVIEW);
                     mark = 0;
                 }
+                #endif
+
 #elif defined(VERSION_US)
                 if (lineNum >= lowerBound && lineNum <= lowerBound + linesPerBox) {
                     if (linePos || xMatrix != 1) {
@@ -1438,7 +1526,8 @@ void handle_dialog_text_and_pages(s8 colorMode, struct DialogEntry *dialog, s8 l
         }
 
 #ifdef VERSION_JP
-        if (linePos == 12) {
+        // MAX CHARACTERS PER LINE or MAX LINE WIDTH IN PIXELS based on gDialogCharWidths
+        if (linePos == 41 || DialogX >= 120) {
             if (str[strIdx + 1] == DIALOG_CHAR_PERIOD) {
                 adjust_pos_and_print_period_char(&xMatrix, &linePos);
                 strIdx++;
@@ -1460,6 +1549,7 @@ void handle_dialog_text_and_pages(s8 colorMode, struct DialogEntry *dialog, s8 l
                 break; // exit loop
             } else {
                 lineNum++;
+                DialogX = 0;
                 handle_dialog_scroll_page_state(lineNum, totalLines, &pageState, &xMatrix, &linePos);
             }
         }
@@ -1998,8 +2088,13 @@ extern Gfx castle_grounds_seg7_us_dl_0700F2E8[];
 #endif
 
 #ifdef VERSION_JP
+#ifdef UK_PATCH
+#define STR_X 38
+#define STR_Y 150
+#else
 #define STR_X 53
 #define STR_Y 136
+#endif
 #else
 #define STR_X 38
 #define STR_Y 142
