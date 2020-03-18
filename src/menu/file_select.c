@@ -102,7 +102,11 @@ static unsigned char textReturn[] = { TEXT_RETURN };
 static unsigned char textViewScore[] = { TEXT_CHECK_SCORE };
 static unsigned char textCopyFileButton[] = { TEXT_COPY_FILE_BUTTON };
 static unsigned char textEraseFileButton[] = { TEXT_ERASE_FILE_BUTTON };
+#ifdef UK_PATCH
+static unsigned char textSoundModes[][10] = { { TEXT_STEREO }, { TEXT_MONO }, { TEXT_HEADSET } };
+#else
 static unsigned char textSoundModes[][8] = { { TEXT_STEREO }, { TEXT_MONO }, { TEXT_HEADSET } };
+#endif
 static unsigned char textMarioA[] = { TEXT_FILE_MARIO_A };
 static unsigned char textMarioB[] = { TEXT_FILE_MARIO_B };
 static unsigned char textMarioC[] = { TEXT_FILE_MARIO_C };
@@ -1437,11 +1441,19 @@ static void print_save_file_star_count(s8 fileIndex, s16 x, s16 y) {
 }
 
 #ifdef VERSION_JP
+#ifdef UK_PATCH
+#define SELECT_FILE_X 75
+#define SCORE_X 55
+#define COPY_X 115
+#define ERASE_X 160
+#define SOUNDMODE_X1 235
+#else
 #define SELECT_FILE_X 96
 #define SCORE_X 50
 #define COPY_X 115
 #define ERASE_X 180
 #define SOUNDMODE_X1 235
+#endif
 #else
 #define SELECT_FILE_X 93
 #define SCORE_X 52
@@ -1486,8 +1498,13 @@ static void print_main_menu_strings(void) {
 }
 
 #ifdef VERSION_JP
+#ifdef UK_PATCH
+#define CHECK_FILE_X 40
+#define NOSAVE_DATA_X1 90
+#else
 #define CHECK_FILE_X 90
 #define NOSAVE_DATA_X1 90
+#endif
 #else
 #define CHECK_FILE_X 95
 #define NOSAVE_DATA_X1 99
@@ -1508,9 +1525,15 @@ static void score_menu_display_message(s8 messageID) {
 }
 
 #ifdef VERSION_JP
+#ifdef UK_PATCH
+#define RETURN_X 27
+#define COPYFILE_X1 128
+#define ERASEFILE_X1 230
+#else
 #define RETURN_X 45
 #define COPYFILE_X1 128
 #define ERASEFILE_X1 228
+#endif
 #else
 #define RETURN_X 44
 #define COPYFILE_X1 135
@@ -1560,12 +1583,21 @@ static void print_score_menu_strings(void) {
 }
 
 #ifdef VERSION_JP
+#ifdef UK_PATCH
+#define NOFILE_COPY_X 90
+#define COPY_FILE_X 34
+#define COPYIT_WHERE_X 90
+#define NOSAVE_DATA_X2 90
+#define COPYCOMPLETE_X 90
+#define SAVE_EXISTS_X1 90
+#else
 #define NOFILE_COPY_X 90
 #define COPY_FILE_X 90
 #define COPYIT_WHERE_X 90
 #define NOSAVE_DATA_X2 90
 #define COPYCOMPLETE_X 90
 #define SAVE_EXISTS_X1 90
+#endif
 #else
 #define NOFILE_COPY_X 119
 #define COPY_FILE_X 104
@@ -1647,8 +1679,13 @@ static void copy_menu_update_message(void) {
 }
 
 #ifdef VERSION_JP
+#ifdef UK_PATCH
+#define VIEWSCORE_X1 120
+#define ERASEFILE_X2 230
+#else
 #define VIEWSCORE_X1 133
 #define ERASEFILE_X2 220
+#endif
 #else
 #define VIEWSCORE_X1 128
 #define ERASEFILE_X2 230
@@ -1764,7 +1801,7 @@ static void print_erase_menu_prompt(s16 x, s16 y) {
 }
 
 #ifdef VERSION_JP
-#define ERASE_FILE_X 96
+#define ERASE_FILE_X 42
 #define NOSAVE_DATA_X3 90
 #define MARIO_ERASED_VAR 3
 #define MARIO_ERASED_X 90
@@ -1850,8 +1887,13 @@ static void erase_menu_update_message(void) {
 }
 
 #ifdef VERSION_JP
+#ifdef UK_PATCH
+#define VIEWSCORE_X2 120
+#define COPYFILE_X2 226
+#else
 #define VIEWSCORE_X2 133
 #define COPYFILE_X2 223
+#endif
 #else
 #define VIEWSCORE_X2 127
 #define COPYFILE_X2 233
@@ -1951,7 +1993,7 @@ static void print_score_file_course_coin_score(s8 fileIndex, s16 courseIndex, s1
     u8 stars = save_file_get_star_flags(fileIndex, courseIndex);
     unsigned char textCoinX[] = { TEXT_COIN_X };
     unsigned char textStar[] = { TEXT_STAR };
-#ifdef VERSION_JP
+#if defined(VERSION_JP) && !defined(UK_PATCH)
 #define LENGTH 5
 #else
 #define LENGTH 8

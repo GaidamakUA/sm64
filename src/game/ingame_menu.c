@@ -1526,8 +1526,12 @@ void handle_dialog_text_and_pages(s8 colorMode, struct DialogEntry *dialog, s8 l
         }
 
 #ifdef VERSION_JP
+#ifdef UK_PATCH
         // MAX CHARACTERS PER LINE or MAX LINE WIDTH IN PIXELS based on gDialogCharWidths
         if (linePos == 41 || DialogX >= 120) {
+#else
+        if (linePos == 12) {
+#endif
             if (str[strIdx + 1] == DIALOG_CHAR_PERIOD) {
                 adjust_pos_and_print_period_char(&xMatrix, &linePos);
                 strIdx++;
@@ -1549,7 +1553,9 @@ void handle_dialog_text_and_pages(s8 colorMode, struct DialogEntry *dialog, s8 l
                 break; // exit loop
             } else {
                 lineNum++;
+#ifdef UK_PATCH
                 DialogX = 0;
+#endif
                 handle_dialog_scroll_page_state(lineNum, totalLines, &pageState, &xMatrix, &linePos);
             }
         }

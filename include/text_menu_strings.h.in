@@ -8,11 +8,24 @@
 /**
  * File Select JP HUD Text
  */
+#ifdef UK_PATCH
+
+#define TEXT_UKHUD_MARIO _("МАРІО") // View Score Menu
+#define TEXT_UKHUD_SELECT_FILE _("ВИБІР ФАЙЛА")
+#define TEXT_UKHUD_CHECK_FILE _("ПЕРЕВІРКА ФАЙЛА")
+#define TEXT_UKHUD_COPY_FILE _("КОПІЮВАННЯ ФАЙЛА")
+#define TEXT_UKHUD_ERASE_FILE _("ВИДАЛЕННЯ ФАЙЛА")
+#define TEXT_UKHUD_SOUND_SELECT _("ВИБІР ЗВУКА")
+
+#else
+
 #define TEXT_JPHUD_MARIO _("マリオ")
 #define TEXT_JPHUD_SELECT_FILE _("ファイルセレクト")
 #define TEXT_JPHUD_CHECK_FILE _("どのスコアをみる？")
 #define TEXT_JPHUD_COPY_FILE _("ファイルコピーする")
 #define TEXT_JPHUD_ERASE_FILE _("ファイルけす")
 #define TEXT_JPHUD_SOUND_SELECT _("サウンドセレクト")
+
+#endif
 
 #endif

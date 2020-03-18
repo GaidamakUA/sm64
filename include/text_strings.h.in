@@ -32,6 +32,123 @@
  */
 // Main Screens
 // JPHUD menu strings are defined in "text_menu_strings.h.in"
+#ifdef UK_PATCH
+
+/**
+{'М': 1,
+ 'А': 10,
+ 'Р': 3,
+ 'І': 4,
+ 'О': 2,
+ 'В': 5,
+ 'И': 3,
+ 'Б': 2,
+ ' ': 4,
+ 'Ф': 3,
+ 'Й': 3,
+ 'Л': 4,
+ 'К': 2,
+ 'П': 1,
+ 'Ю': 1,
+ 'Н': 4,
+ 'Я': 2,
+ 'Д': 1,
+ 'Е': 1,
+ 'З': 1,
+ 'У': 1}
+ */
+#define TEXT_MARIO TEXT_UKHUD_MARIO // View Score Menu
+#define TEXT_SELECT_FILE TEXT_UKHUD_SELECT_FILE
+#define TEXT_CHECK_FILE TEXT_UKHUD_CHECK_FILE
+#define TEXT_COPY_FILE TEXT_UKHUD_COPY_FILE
+#define TEXT_ERASE_FILE TEXT_UKHUD_ERASE_FILE
+#define TEXT_SOUND_SELECT TEXT_UKHUD_SOUND_SELECT
+
+#define TEXT_FILE_MARIO_A _("МАРІО A")
+#define TEXT_FILE_MARIO_B _("МАРІО B")
+#define TEXT_FILE_MARIO_C _("МАРІО C")
+#define TEXT_FILE_MARIO_D _("МАРІО D")
+
+// Menu Options
+#define TEXT_SCORE _("ОЧКИ")
+#define TEXT_COPY _("КОПІЯ")
+#define TEXT_ERASE _("ВИДАЛЕННЯ")
+
+// Sound Options
+#define TEXT_STEREO _("СТЕРЕО")
+#define TEXT_MONO _("МОНО")
+#define TEXT_HEADSET _("НАВУШНИКИ")
+
+// Misc Menu Text
+#define TEXT_SAVED_DATA_EXISTS _("ЗБЕРЕЖЕННЯ ІСНУЄ")
+#define TEXT_NO_SAVED_DATA_EXISTS _("НЕМАЄ ТАКОГО ЗБЕРЕЖЕННЯ")
+
+// Inside a Menu
+#define TEXT_RETURN _("ПОВЕРНУТИСЯ")
+#define TEXT_CHECK_SCORE _("ПЕРЕГЛЯД ОЧОК")
+#define TEXT_COPY_FILE_BUTTON _("СКОПІЮВАТИ")
+#define TEXT_ERASE_FILE_BUTTON _("ВИДАЛИТИ")
+
+// Score Menu
+#define TEXT_HI_SCORE _("НАЙКРАЩІ ОЧКИ")
+#define TEXT_MY_SCORE _("МОЇ ОЧКИ")
+#define TEXT_SCORE_MARIO_A _("Ａ")
+#define TEXT_SCORE_MARIO_B _("МАРІО Ｂ")
+#define TEXT_SCORE_MARIO_C _("МАРІО Ｃ")
+#define TEXT_SCORE_MARIO_D _("МАРІО Ｄ")
+
+// Copy Menu
+#define TEXT_COPY_IT_TO_WHERE _("В ЯКУ КОМІРКУ СКОПІЮВАТИ？")
+#define TEXT_COPYING_COMPLETED _("СКОПІЙОВАНО")
+#define TEXT_NO_FILE_TO_COPY_FROM _("ПОРОЖНІЙ ФАЙЛ")
+
+// Erase Menu
+#define TEXT_SURE _("ПЕВЕН？")
+#define TEXT_YES _("ТАК")
+#define TEXT_NO _("НІ")
+#define TEXT_FILE_MARIO_A_JUST_ERASED _("МАРІО Ａ ВИДАЛЕНО")
+
+/**
+ * Menus Text (Pause, Course Completed)
+ */
+// Main Courses
+#define TEXT_COURSE _("КУРС")
+#define TEXT_MYSCORE _("МОЇОЧКИ")
+#define TEXT_CONTINUE _("ПРОДОВЖИТИ")
+#define TEXT_EXIT_COURSE _("ВИЙТИ З КУРСУ")
+#define TEXT_CAMERA_ANGLE_R _("Ｒ ВСТАНОВЛЮЄ КУТ КАМЕРИ")
+
+// Camera Options
+#define TEXT_LAKITU_MARIO _("ЛАКІТУ+МАРІО")
+#define TEXT_LAKITU_STOP _("ЛАКІТУ+ЗУПИНКА")
+#define TEXT_NORMAL_UPCLOSE _("(ЗВИЧАЙНИА）（ВПРИТУЛ）")
+#define TEXT_NORMAL_FIXED _("(ЗВИЧАЙНИА）(НЕРУХОМА）")
+
+// Course Completed Misc Text
+#define TEXT_CATCH _("ВПІЙМАВ！")
+#define TEXT_CLEAR _("ПРОЙДЕНО！")
+#define TEXT_HUD_HI_SCORE _("НАЙКРАЩІ ОЧКИ")
+
+// Save Options
+#define TEXT_SAVE_AND_CONTINUE _("ЗБЕРІГТИ Й ПРОДОВЖИТИ")
+#define TEXT_SAVE_AND_QUIT _("ЗБЕРІГТИ Й ВИЙТИ")
+#define TEXT_CONTINUE_WITHOUT_SAVING _("ПРОДОВЖИТИ НЕЗБЕРІГШИ")
+
+/**
+ * Ending Peach cutscene text.
+ */
+#define TEXT_FILE_MARIO_EXCLAMATION _("Маріо！")
+#define TEXT_POWER_STARS_RESTORED _("Сила Зірок повернулася до замку...")
+#define TEXT_THANKS_TO_YOU _("...це сталося завдяки тобі！")
+#define TEXT_THANK_YOU_MARIO _("Дякую, Маріо!")
+#define TEXT_SOMETHING_SPECIAL _("Ми зробимо для тебе дещо особливе...")
+#define TEXT_LISTEN_EVERYBODY _("Увага всім,")
+#define TEXT_LETS_HAVE_CAKE _("нумо спечемо смачний торт...")
+#define TEXT_FOR_MARIO _("...для Маріо...")
+#define TEXT_FILE_MARIO_QUESTION _("Маріо!")
+
+#else
+
 #define TEXT_MARIO TEXT_JPHUD_MARIO // View Score Menu
 #define TEXT_SELECT_FILE TEXT_JPHUD_SELECT_FILE
 #define TEXT_CHECK_FILE TEXT_JPHUD_CHECK_FILE
@@ -121,6 +238,8 @@
 #define TEXT_LETS_HAVE_CAKE _("おいしいケーキを　やきましょう")
 #define TEXT_FOR_MARIO _("マリオの　ために・・・")
 #define TEXT_FILE_MARIO_QUESTION _("マリオ？")
+
+#endif
 
 #endif
 
