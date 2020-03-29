@@ -941,38 +941,47 @@ ALIGNED8 static const u8 texture_font_char_jp_katakana_nu[] = {
 #include "textures/segment2/segment2.07910.ia1.inc.c"
 };
 
+// UK - [A]
 ALIGNED8 static const u8 texture_font_char_jp_katakana_ne[] = {
 #include "textures/segment2/segment2.07920.ia1.inc.c"
 };
 
+// UK - [B]
 ALIGNED8 static const u8 texture_font_char_jp_katakana_no[] = {
 #include "textures/segment2/segment2.07930.ia1.inc.c"
 };
 
+//UK - [C] 
 ALIGNED8 static const u8 texture_font_char_jp_katakana_ha[] = {
 #include "textures/segment2/segment2.07940.ia1.inc.c"
 };
 
+//UK - [C] up
 ALIGNED8 static const u8 texture_font_char_jp_katakana_hi[] = {
 #include "textures/segment2/segment2.07950.ia1.inc.c"
 };
 
+//UK - [C] down
 ALIGNED8 static const u8 texture_font_char_jp_katakana_hu[] = {
 #include "textures/segment2/segment2.07960.ia1.inc.c"
 };
 
+//UK - [C] left
 ALIGNED8 static const u8 texture_font_char_jp_katakana_he[] = {
 #include "textures/segment2/segment2.07970.ia1.inc.c"
 };
 
+//UK - [C] right
 ALIGNED8 static const u8 texture_font_char_jp_katakana_ho[] = {
 #include "textures/segment2/segment2.07980.ia1.inc.c"
 };
 
+//UK - [R]
 ALIGNED8 static const u8 texture_font_char_jp_katakana_ma[] = {
 #include "textures/segment2/segment2.07990.ia1.inc.c"
 };
 
+//UK - [Z]
 ALIGNED8 static const u8 texture_font_char_jp_katakana_mi[] = {
 #include "textures/segment2/segment2.079A0.ia1.inc.c"
 };
