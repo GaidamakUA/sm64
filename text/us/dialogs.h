@@ -372,6 +372,7 @@ around while flying, and\n\
 press [Z] to land."))
 
 DEFINE_DIALOG(DIALOG_033, 1, 6, 30, 200, _("\
+Охайо-ґодзаїмасу!\n\
 Ciao! You've reached\n\
 Princess Toadstool's\n\
 castle via a warp pipe.\n\

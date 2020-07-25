@@ -56,6 +56,7 @@ endif
 ifeq ($(LANG_PATCH),uk)
   $(info Applying Ukrainian lang patch!)
   VERSION_CFLAGS := $(VERSION_CFLAGS) -DUK_PATCH
+
   TARGET := sm64.uk
 endif
 
