@@ -56,6 +56,7 @@ endif
 ifeq ($(LANG_PATCH),uk)
   $(info Applying Ukrainian lang patch!)
   VERSION_CFLAGS := $(VERSION_CFLAGS) -DUK_PATCH
+
   TARGET := sm64.uk
 endif
 
@@ -332,10 +333,16 @@ $(BUILD_DIR)/bin/eu/translation_de.o: $(BUILD_DIR)/text/de/define_text.inc.c
 $(BUILD_DIR)/bin/eu/translation_fr.o: $(BUILD_DIR)/text/fr/define_text.inc.c
 
 else
+ifeq ($(LANG_PATCH),uk)
+TEXT_DIRS := text/js
+
+$(BUILD_DIR)/bin/segment2.o: $(BUILD_DIR)/text/$(VERSION)/define_text.inc.c
+else
 TEXT_DIRS := text/$(VERSION)
 
 # non-EU encoded text inserted into segment 0x02
 $(BUILD_DIR)/bin/segment2.o: $(BUILD_DIR)/text/$(VERSION)/define_text.inc.c
+endif
 endif
 
 $(BUILD_DIR)/text/%/define_text.inc.c: text/define_text.inc.c text/%/courses.h text/%/dialogs.h
