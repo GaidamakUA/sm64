@@ -1,22 +1,17 @@
-#include <ultra64.h>
+#include <PR/ultratypes.h>
+#include <PR/gbi.h>
 #include <math.h>
 
-#include "sm64.h"
-#include "shadow.h"
-
-#include "area.h"
-#include "engine/graph_node.h"
 #include "engine/math_util.h"
 #include "engine/surface_collision.h"
-#include "mario_animation_ids.h"
-#include "mario.h"
-#include "memory.h"
-#include "rendering_graph_node.h"
-#include "room.h"
-#include "segment2.h"
-#include "save_file.h"
 #include "geo_misc.h"
 #include "level_table.h"
+#include "memory.h"
+#include "object_list_processor.h"
+#include "rendering_graph_node.h"
+#include "segment2.h"
+#include "shadow.h"
+#include "sm64.h"
 
 /**
  * @file shadow.c
@@ -106,10 +101,10 @@ shadowRectangle rectangles[2] = {
 };
 
 // See shadow.h for documentation.
-s8 sMarioOnFlyingCarpet;
-s16 sSurfaceTypeBelowShadow;
 s8 gShadowAboveWaterOrLava;
 s8 gMarioOnIceOrCarpet;
+s8 sMarioOnFlyingCarpet;
+s16 sSurfaceTypeBelowShadow;
 
 /**
  * Let (oldZ, oldX) be the relative coordinates of a point on a rectangle,

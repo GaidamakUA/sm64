@@ -2,13 +2,14 @@
 
 #define INCLUDED_FROM_CAMERA_C
 
+#include "prevent_bss_reordering.h"
 #include "sm64.h"
 #include "camera.h"
 #include "seq_ids.h"
 #include "dialog_ids.h"
 #include "audio/external.h"
 #include "mario_misc.h"
-#include "game.h"
+#include "game_init.h"
 #include "hud.h"
 #include "engine/math_util.h"
 #include "area.h"
@@ -18,16 +19,13 @@
 #include "ingame_menu.h"
 #include "mario_actions_cutscene.h"
 #include "save_file.h"
-#include "room.h"
 #include "object_helpers.h"
-#include "object_helpers2.h"
 #include "print.h"
 #include "spawn_sound.h"
 #include "behavior_actions.h"
 #include "behavior_data.h"
 #include "object_list_processor.h"
 #include "paintings.h"
-#include "prevent_bss_reordering.h"
 #include "engine/graph_node.h"
 #include "level_table.h"
 
@@ -78,20 +76,19 @@
  */
 
 // BSS
-
+/**
+ * Stores Lakitu's position from the last frame, used for transitioning in next_lakitu_state()
+ */
+Vec3f sOldPosition;
+/**
+ * Stores Lakitu's focus from the last frame, used for transitioning in next_lakitu_state()
+ */
+Vec3f sOldFocus;
 /**
  * Global array of PlayerCameraState.
  * L is real.
  */
 struct PlayerCameraState gPlayerCameraState[2];
-/**
- * Stores lakitu's position from the last frame, used for transitioning in next_lakitu_state()
- */
-Vec3f sOldPosition;
-/**
- * Stores lakitu's focus from the last frame, used for transitioning in next_lakitu_state()
- */
-Vec3f sOldFocus;
 /**
  * Direction controlled by player 2, moves the focus during the credits.
  */
@@ -109,15 +106,104 @@ s16 sCreditsPlayer2Yaw;
  */
 u8 sFramesPaused;
 
+extern struct CameraFOVStatus sFOVState;
+extern struct TransitionInfo sModeTransition;
+extern struct PlayerGeometry sMarioGeometry;
+extern s16 unusedFreeRoamWallYaw;
+extern s16 sAvoidYawVel;
+extern s16 sCameraYawAfterDoorCutscene;
+extern s16 unusedSplinePitch;
+extern s16 unusedSplineYaw;
+extern struct HandheldShakePoint sHandheldShakeSpline[4];
+extern s16 sHandheldShakeMag;
+extern f32 sHandheldShakeTimer;
+extern f32 sHandheldShakeInc;
+extern s16 sHandheldShakePitch;
+extern s16 sHandheldShakeYaw;
+extern s16 sHandheldShakeRoll;
+extern u32 unused8033B30C;
+extern u32 unused8033B310;
+extern s16 sSelectionFlags;
+extern s16 unused8033B316;
+extern s16 s2ndRotateFlags;
+extern s16 unused8033B31A;
+extern s16 sCameraSoundFlags;
+extern u16 sCButtonsPressed;
+extern s16 sCutsceneDialogID;
+extern struct LakituState gLakituState;
+extern s16 unused8033B3E8;
+extern s16 sAreaYaw;
+extern s16 sAreaYawChange;
+extern s16 sLakituDist;
+extern s16 sLakituPitch;
+extern f32 sZoomAmount;
+extern s16 sCSideButtonYaw;
+extern s16 sBehindMarioSoundTimer;
+extern f32 sZeroZoomDist;
+extern s16 sCUpCameraPitch;
+extern s16 sModeOffsetYaw;
+extern s16 sSpiralStairsYawOffset;
+extern s16 s8DirModeBaseYaw;
+extern s16 s8DirModeYawOffset;
+extern f32 sPanDistance;
+extern f32 sCannonYOffset;
+extern struct ModeTransitionInfo sModeInfo;
+extern Vec3f sCastleEntranceOffset;
+extern u32 sParTrackIndex;
+extern struct ParallelTrackingPoint *sParTrackPath;
+extern struct CameraStoredInfo sParTrackTransOff;
+extern struct CameraStoredInfo sCameraStoreCUp;
+extern struct CameraStoredInfo sCameraStoreCutscene;
+extern s16 gCameraMovementFlags;
+extern s16 sStatusFlags;
+extern struct CutsceneSplinePoint sCurCreditsSplinePos[32];
+extern struct CutsceneSplinePoint sCurCreditsSplineFocus[32];
+extern s16 sCutsceneSplineSegment;
+extern f32 sCutsceneSplineSegmentProgress;
+extern s16 unused8033B6E8;
+extern s16 sCutsceneShot;
+extern s16 gCutsceneTimer;
+extern struct CutsceneVariable sCutsceneVars[10];
+extern s32 gObjCutsceneDone;
+extern u32 gCutsceneObjSpawn;
+extern struct Camera *gCamera;
+
+/**
+ * Lakitu's position and focus.
+ * @see LakituState
+ */
+struct LakituState gLakituState;
 struct CameraFOVStatus sFOVState;
 struct TransitionInfo sModeTransition;
 struct PlayerGeometry sMarioGeometry;
+struct Camera *gCamera;
 s16 unusedFreeRoamWallYaw;
 s16 sAvoidYawVel;
 s16 sCameraYawAfterDoorCutscene;
+/**
+ * The current spline that controls the camera's position during the credits.
+ */
+struct CutsceneSplinePoint sCurCreditsSplinePos[32];
+
+/**
+ * The current spline that controls the camera's focus during the credits.
+ */
+struct CutsceneSplinePoint sCurCreditsSplineFocus[32];
 
 s16 unusedSplinePitch;
 s16 unusedSplineYaw;
+
+/**
+ * The progress (from 0 to 1) through the current spline segment.
+ * When it becomes >= 1, 1.0 is subtracted from it and sCutsceneSplineSegment is increased.
+ */
+f32 sCutsceneSplineSegmentProgress;
+
+/**
+ * The current segment of the CutsceneSplinePoint[] being used.
+ */
+s16 sCutsceneSplineSegment;
+s16 unused8033B6E8;
 
 // Shaky Hand-held Camera effect variables
 struct HandheldShakePoint sHandheldShakeSpline[4];
@@ -128,13 +214,36 @@ s16 sHandheldShakePitch;
 s16 sHandheldShakeYaw;
 s16 sHandheldShakeRoll;
 
+/**
+ * Controls which object to spawn in the intro and ending cutscenes.
+ */
+u32 gCutsceneObjSpawn;
+/**
+ * Controls when an object-based cutscene should end. It's only used in the star spawn cutscenes, but
+ * Yoshi also toggles this.
+ */
+s32 gObjCutsceneDone;
+
 u32 unused8033B30C;
 u32 unused8033B310;
+
 /**
  * Determines which R-Trigger mode is selected in the pause menu.
  */
 s16 sSelectionFlags;
+
+/**
+ * Flags that determine what movements the camera should start / do this frame.
+ */
+s16 gCameraMovementFlags;
 s16 unused8033B316;
+
+/**
+ * Flags that change how modes operate and how Lakitu moves.
+ * The most commonly used flag is CAM_FLAG_SMOOTH_MOVEMENT, which makes Lakitu fly to the next position,
+ * instead of warping.
+ */
+s16 sStatusFlags;
 /**
  * Flags that determine whether the player has already rotated left or right. Used in radial mode to
  * determine whether to rotate all the way, or just to 60 degrees.
@@ -154,28 +263,34 @@ u16 sCButtonsPressed;
  */
 s16 sCutsceneDialogID;
 /**
- * Lakitu's position and focus.
- * @see LakituState
+ * The currently playing shot in the cutscene.
  */
-struct LakituState gLakituState;
-s16 unused8033B3E8;
+s16 sCutsceneShot;
 /**
- * The angle of the direction vector from the area's center to mario's position.
+ * The current frame of the cutscene shot.
+ */
+s16 gCutsceneTimer;
+s16 unused8033B3E8;
+#ifdef VERSION_EU
+s16 unused8033B3E82;
+#endif
+/**
+ * The angle of the direction vector from the area's center to Mario's position.
  */
 s16 sAreaYaw;
 
 /**
- * How much sAreaYaw changed when mario moved.
+ * How much sAreaYaw changed when Mario moved.
  */
 s16 sAreaYawChange;
 
 /**
- * Lakitu's distance from mario in C-Down mode
+ * Lakitu's distance from Mario in C-Down mode
  */
 s16 sLakituDist;
 
 /**
- * How much lakitu looks down in C-Down mode
+ * How much Lakitu looks down in C-Down mode
  */
 s16 sLakituPitch;
 
@@ -187,7 +302,7 @@ f32 sZoomAmount;
 s16 sCSideButtonYaw;
 
 /**
- * Sound timer used to space out sounds in behind mario mode
+ * Sound timer used to space out sounds in behind Mario mode
  */
 s16 sBehindMarioSoundTimer;
 
@@ -197,7 +312,7 @@ s16 sBehindMarioSoundTimer;
 f32 sZeroZoomDist;
 
 /**
- * The camera's pitch in C-Up mode. Mainly controls mario's head rotation.
+ * The camera's pitch in C-Up mode. Mainly controls Mario's head rotation.
  */
 s16 sCUpCameraPitch;
 /**
@@ -206,7 +321,7 @@ s16 sCUpCameraPitch;
 s16 sModeOffsetYaw;
 
 /**
- * Stores mario's yaw around the stairs, relative to the camera's position.
+ * Stores Mario's yaw around the stairs, relative to the camera's position.
  *
  * Used in update_spiral_stairs_camera()
  */
@@ -222,19 +337,24 @@ s16 s8DirModeBaseYaw;
 s16 s8DirModeYawOffset;
 
 /**
- * The distance that the camera will look ahead of mario in the direction mario is facing.
+ * The distance that the camera will look ahead of Mario in the direction Mario is facing.
  */
 f32 sPanDistance;
 
 /**
- * When mario gets in the cannon, it is pointing straight up and rotates down.
+ * When Mario gets in the cannon, it is pointing straight up and rotates down.
  * This is used to make the camera start up and rotate down, like the cannon.
  */
 f32 sCannonYOffset;
-struct ModeTransitionInfo sModeInfo;
-
 /**
- * Offset added to sFixedModeBasePosition when mario is inside, near the castle lobby entrance
+ * These structs are used by the cutscenes. Most of the fields are unused, and some (all?) of the used
+ * ones have multiple uses.
+ * Check the cutscene_start functions for documentation on the cvars used by a specific cutscene.
+ */
+struct CutsceneVariable sCutsceneVars[10];
+struct ModeTransitionInfo sModeInfo;
+/**
+ * Offset added to sFixedModeBasePosition when Mario is inside, near the castle lobby entrance
  */
 Vec3f sCastleEntranceOffset;
 
@@ -258,7 +378,7 @@ struct ParallelTrackingPoint *sParTrackPath;
 struct CameraStoredInfo sParTrackTransOff;
 
 /**
- * The information stored when C-Up is active, used to update lakitu's rotation when exiting C-Up
+ * The information stored when C-Up is active, used to update Lakitu's rotation when exiting C-Up
  */
 struct CameraStoredInfo sCameraStoreCUp;
 
@@ -266,65 +386,6 @@ struct CameraStoredInfo sCameraStoreCUp;
  * The information stored during cutscenes
  */
 struct CameraStoredInfo sCameraStoreCutscene;
-
-/**
- * Flags that determine what movements the camera should start / do this frame.
- */
-s16 gCameraMovementFlags;
-
-/**
- * Flags that change how modes operate and how lakitu moves.
- * The most commonly used flag is CAM_FLAG_SMOOTH_MOVEMENT, which makes lakitu fly to the next position,
- * instead of warping.
- */
-s16 sStatusFlags;
-
-/**
- * The current spline that controls the camera's position during the credits.
- */
-struct CutsceneSplinePoint sCurCreditsSplinePos[32];
-
-/**
- * The current spline that controls the camera's focus during the credits.
- */
-struct CutsceneSplinePoint sCurCreditsSplineFocus[32];
-
-/**
- * The current segment of the CutsceneSplinePoint[] being used.
- */
-s16 sCutsceneSplineSegment;
-
-/**
- * The progress (from 0 to 1) through the current spline segment.
- * When it becomes >= 1, 1.0 is subtracted from it and sCutsceneSplineSegment is increased.
- */
-f32 sCutsceneSplineSegmentProgress;
-s16 unused8033B6E8;
-/**
- * The currently playing shot in the cutscene.
- */
-s16 sCutsceneShot;
-/**
- * The current frame of the cutscene shot.
- */
-s16 gCutsceneTimer;
-
-/**
- * These structs are used by the cutscenes. Most of the fields are unused, and some (all?) of the used
- * ones have multiple uses.
- * Check the cutscene_start functions for documentation on the cvars used by a specific cutscene.
- */
-struct CutsceneVariable sCutsceneVars[10];
-/**
- * Controls when an object-based cutscene should end. It's only used in the star spawn cutscenes, but
- * yoshi also toggles this.
- */
-s32 gObjCutsceneDone;
-/**
- * Controls which object to spawn in the intro and ending cutscenes.
- */
-u32 gCutsceneObjSpawn;
-struct Camera *gCamera;
 
 // first iteration of data
 u32 unused8032CFC0 = 0;
@@ -493,8 +554,8 @@ void set_camera_shake_from_hit(s16 shake) {
             break;
 
         case SHAKE_SHOCK:
-            set_camera_pitch_shake(RandomFloat() * 64.f, 0x8, 0x8000);
-            set_camera_yaw_shake(RandomFloat() * 64.f, 0x8, 0x8000);
+            set_camera_pitch_shake(random_float() * 64.f, 0x8, 0x8000);
+            set_camera_yaw_shake(random_float() * 64.f, 0x8, 0x8000);
             break;
     }
 }
@@ -589,7 +650,7 @@ void unused_set_camera_pitch_shake_env(s16 shake) {
 }
 
 /**
- * Calculates mario's distance to the floor, or the water level if it is above the floor. Then:
+ * Calculates Mario's distance to the floor, or the water level if it is above the floor. Then:
  * `posOff` is set to the distance multiplied by posMul and bounded to [-posBound, posBound]
  * `focOff` is set to the distance multiplied by focMul and bounded to [-focBound, focBound]
  *
@@ -598,8 +659,9 @@ void unused_set_camera_pitch_shake_env(s16 shake) {
  *      both ranges are always 200.f
  *          Since focMul is 0.9, `focOff` is closer to the floor than `posOff`
  *      posOff and focOff are sometimes the same address, which just ignores the pos calculation
+ *! Doesn't return anything, but required to match EU
  */
-void calc_y_to_curr_floor(f32 *posOff, f32 posMul, f32 posBound, f32 *focOff, f32 focMul, f32 focBound) {
+f32 calc_y_to_curr_floor(f32 *posOff, f32 posMul, f32 posBound, f32 *focOff, f32 focMul, f32 focBound) {
     f32 floorHeight = sMarioGeometry.currFloorHeight;
     f32 waterHeight;
     UNUSED s32 filler;
@@ -715,7 +777,7 @@ void set_camera_height(struct Camera *c, f32 goalHeight) {
             goalHeight = camFloorHeight;
             c->pos[1] = goalHeight;
         }
-        // Warp camera to goalHeight if further than 1000 and mario is stuck in the ground
+        // Warp camera to goalHeight if further than 1000 and Mario is stuck in the ground
         if (sMarioCamState->action == ACT_BUTT_STUCK_IN_GROUND ||
             sMarioCamState->action == ACT_HEAD_STUCK_IN_GROUND ||
             sMarioCamState->action == ACT_FEET_STUCK_IN_GROUND) {
@@ -770,7 +832,7 @@ s16 look_down_slopes(s16 camYaw) {
  *      pan[0] = sins(sMarioCamState->faceAngle[1] + yaw) * sins(0xC00) * dist;
  * Perhaps, early in development, the pan used to be calculated for both the x and z directions
  *
- * Since this function only affects the camera's focus, mario's movement direction isn't affected.
+ * Since this function only affects the camera's focus, Mario's movement direction isn't affected.
  */
 void pan_ahead_of_player(struct Camera *c) {
     f32 dist;
@@ -778,10 +840,10 @@ void pan_ahead_of_player(struct Camera *c) {
     s16 yaw;
     Vec3f pan = { 0, 0, 0 };
 
-    // Get distance and angle from camera to mario.
+    // Get distance and angle from camera to Mario.
     vec3f_get_dist_and_angle(c->pos, sMarioCamState->pos, &dist, &pitch, &yaw);
 
-    // The camera will pan ahead up to about 30% of the camera's distance to mario.
+    // The camera will pan ahead up to about 30% of the camera's distance to Mario.
     pan[2] = sins(0xC00) * dist;
 
     rotate_in_xz(pan, pan, sMarioCamState->faceAngle[1]);
@@ -791,21 +853,21 @@ void pan_ahead_of_player(struct Camera *c) {
     // Only pan left or right
     pan[2] = 0.f;
 
-    // If mario is long jumping, or on a flag pole (but not at the top), then pan in the opposite direction
+    // If Mario is long jumping, or on a flag pole (but not at the top), then pan in the opposite direction
     if (sMarioCamState->action == ACT_LONG_JUMP ||
        (sMarioCamState->action != ACT_TOP_OF_POLE && (sMarioCamState->action & ACT_FLAG_ON_POLE))) {
         pan[0] = -pan[0];
     }
 
     // Slowly make the actual pan, sPanDistance, approach the calculated pan
-    // If mario is sleeping, then don't pan
+    // If Mario is sleeping, then don't pan
     if (sStatusFlags & CAM_FLAG_SLEEPING) {
         approach_f32_asymptotic_bool(&sPanDistance, 0.f, 0.025f);
     } else {
         approach_f32_asymptotic_bool(&sPanDistance, pan[0], 0.025f);
     }
 
-    // Now apply the pan. It's a dir vector to the left or right, rotated by the camera's yaw to mario
+    // Now apply the pan. It's a dir vector to the left or right, rotated by the camera's yaw to Mario
     pan[0] = sPanDistance;
     yaw = -yaw;
     rotate_in_xz(pan, pan, yaw);
@@ -908,7 +970,7 @@ void radial_camera_move(struct Camera *c) {
         yawOffset = minAreaYaw;
     }
 
-    // Check if mario stepped on a surface that rotates the camera. For example, when mario enters the
+    // Check if Mario stepped on a surface that rotates the camera. For example, when Mario enters the
     // gate in BoB, the camera turns right to face up the hill path
     if (!(gCameraMovementFlags & CAM_MOVE_ROTATE)) {
         if (sMarioGeometry.currFloorType == SURFACE_CAMERA_MIDDLE
@@ -994,12 +1056,12 @@ void radial_camera_move(struct Camera *c) {
         }
     }
     if (!(gCameraMovementFlags & CAM_MOVE_ROTATE)) {
-        // If not rotating, rotate away from walls obscuring mario from view
+        // If not rotating, rotate away from walls obscuring Mario from view
         if (avoidStatus == 3) {
             approach_s16_asymptotic_bool(&sModeOffsetYaw, avoidYaw, 10);
         } else {
             if (c->mode == CAMERA_MODE_RADIAL) {
-                // sModeOffsetYaw only updates when mario is moving
+                // sModeOffsetYaw only updates when Mario is moving
                 rotateSpeed = gMarioStates[0].forwardVel / 32.f * 128.f;
                 camera_approach_s16_symmetric_bool(&sModeOffsetYaw, yawOffset, rotateSpeed);
             }
@@ -1019,7 +1081,7 @@ void radial_camera_move(struct Camera *c) {
 }
 
 /**
- * Moves lakitu from zoomed in to zoomed out and vice versa.
+ * Moves Lakitu from zoomed in to zoomed out and vice versa.
  * When C-Down mode is not active, sLakituDist and sLakituPitch decrease to 0.
  */
 void lakitu_zoom(f32 rangeDist, s16 rangePitch) {
@@ -1061,7 +1123,7 @@ void radial_camera_input_default(struct Camera *c) {
 }
 
 /**
- * Makes lakitu cam's yaw match the angle turned towards in C-Up mode, and makes lakitu slowly fly back
+ * Makes Lakitu cam's yaw match the angle turned towards in C-Up mode, and makes Lakitu slowly fly back
  * to the distance he was at before C-Up
  */
 void update_yaw_and_dist_from_c_up(UNUSED struct Camera *c) {
@@ -1140,7 +1202,7 @@ s32 update_outward_radial_camera(struct Camera *c, Vec3f focus, Vec3f pos) {
     s16 camYaw = atan2s(zDistFocToMario, xDistFocToMario) + sModeOffsetYaw + DEGREES(180);
     s16 pitch = look_down_slopes(camYaw);
     f32 baseDist = 1000.f;
-    // A base offset of 125.f is ~= mario's eye height
+    // A base offset of 125.f is ~= Mario's eye height
     f32 yOff = 125.f;
     f32 posY;
     f32 focusY;
@@ -1182,15 +1244,15 @@ void mode_outward_radial_camera(struct Camera *c) {
  * Uses the line between the next two points in sParTrackPath
  * The camera can move forward/back and side to side, but it will face perpendicular to that line
  *
- * Although, annoyingly, it's not truly parallel, the function returns the yaw from the camera to mario,
- * so mario will run slightly towards the camera.
+ * Although, annoyingly, it's not truly parallel, the function returns the yaw from the camera to Mario,
+ * so Mario will run slightly towards the camera.
  */
 s32 update_parallel_tracking_camera(struct Camera *c, Vec3f focus, Vec3f pos) {
     Vec3f path[2];
     Vec3f parMidPoint;
     Vec3f marioOffset;
     Vec3f camOffset;
-    /// Adjusts the focus to look where mario is facing. Unused since marioOffset is copied to focus
+    /// Adjusts the focus to look where Mario is facing. Unused since marioOffset is copied to focus
     Vec3f focOffset;
     s16 pathPitch;
     s16 pathYaw;
@@ -1234,7 +1296,7 @@ s32 update_parallel_tracking_camera(struct Camera *c, Vec3f focus, Vec3f pos) {
     calc_y_to_curr_floor(&marioFloorDist, 1.f, 200.f, &marioFloorDist, 0.9f, 200.f);
 
     marioPos[0] = sMarioCamState->pos[0];
-    // Mario's y pos + ~mario's height + mario's height above the floor
+    // Mario's y pos + ~Mario's height + Mario's height above the floor
     marioPos[1] = sMarioCamState->pos[1] + 150.f + marioFloorDist;
     marioPos[2] = sMarioCamState->pos[2];
 
@@ -1278,8 +1340,8 @@ s32 update_parallel_tracking_camera(struct Camera *c, Vec3f focus, Vec3f pos) {
     rotate_in_yz(camOffset, camOffset, pathPitch);
     pathPitch = -pathPitch;
 
-    // If mario is distThresh units away from the camera along the path, move the camera
-    //! When distThresh != 0, it causes mario to move slightly towards the camera when running sideways
+    // If Mario is distThresh units away from the camera along the path, move the camera
+    //! When distThresh != 0, it causes Mario to move slightly towards the camera when running sideways
     //! Set each ParallelTrackingPoint's distThresh to 0 to make Mario truly run parallel to the path
     if (marioOffset[2] > camOffset[2]) {
         if (marioOffset[2] - camOffset[2] > distThresh) {
@@ -1291,7 +1353,7 @@ s32 update_parallel_tracking_camera(struct Camera *c, Vec3f focus, Vec3f pos) {
         }
     }
 
-    // If zoom != 0.0, the camera will move zoom% closer to mario
+    // If zoom != 0.0, the camera will move zoom% closer to Mario
     marioOffset[0] = -marioOffset[0] * zoom;
     marioOffset[1] = marioOffset[1] * zoom;
     marioOffset[2] = camOffset[2];
@@ -1305,7 +1367,7 @@ s32 update_parallel_tracking_camera(struct Camera *c, Vec3f focus, Vec3f pos) {
     pathAngle[1] = pathYaw; //! No effect
 
     // make marioOffset[2] == distance from the start of the path
-    marioOffset[2] = pathLength / 2.f - marioOffset[2];
+    marioOffset[2] = pathLength / 2 - marioOffset[2];
 
     pathAngle[1] = pathYaw + DEGREES(180);
     pathAngle[2] = 0;
@@ -1314,8 +1376,8 @@ s32 update_parallel_tracking_camera(struct Camera *c, Vec3f focus, Vec3f pos) {
     offset_rotated(pos, path[0], marioOffset, pathAngle);
     vec3f_get_dist_and_angle(path[0], c->pos, &camParDist, &pathPitch, &pathYaw);
 
-    // Adjust the focus. Does nothing, focus is set to mario at the end
-    focOffset[2] = pathLength / 2.f - focOffset[2];
+    // Adjust the focus. Does nothing, focus is set to Mario at the end
+    focOffset[2] = pathLength / 2 - focOffset[2];
     offset_rotated(c->focus, path[0], focOffset, pathAngle);
 
     // Changing paths, update the stored position offset
@@ -1351,12 +1413,12 @@ s32 update_parallel_tracking_camera(struct Camera *c, Vec3f focus, Vec3f pos) {
     // Check if the camera should go to the previous path
     if (sParTrackIndex != 0) {
         // get Mario's distance to the next path
-        calculate_angles(sParTrackPath[sParTrackIndex].pos, sParTrackPath[sParTrackIndex + 1].pos, &nextPitch, &nextYaw);
+        calculate_angles((*(sParTrackPath + sParTrackIndex)).pos, (*(sParTrackPath + sParTrackIndex + 1)).pos, &nextPitch, &nextYaw);
         vec3f_set_dist_and_angle(sParTrackPath[sParTrackIndex].pos, nextPathPos, 700.f, nextPitch, nextYaw);
         distToPrev = calc_abs_dist(marioPos, nextPathPos);
 
         // get Mario's distance to the previous path
-        calculate_angles(sParTrackPath[sParTrackIndex].pos, sParTrackPath[sParTrackIndex - 1].pos, &prevPitch, &prevYaw);
+        calculate_angles((*(sParTrackPath + sParTrackIndex)).pos, (*(sParTrackPath + sParTrackIndex - 1)).pos, &prevPitch, &prevYaw);
         vec3f_set_dist_and_angle(sParTrackPath[sParTrackIndex].pos, prevPathPos, 700.f, prevPitch, prevYaw);
         distToNext = calc_abs_dist(marioPos, prevPathPos);
         if (distToPrev > distToNext) {
@@ -1387,11 +1449,11 @@ s32 update_fixed_camera(struct Camera *c, Vec3f focus, UNUSED Vec3f pos) {
     Vec3s faceAngle;
     struct Surface *ceiling;
     Vec3f basePos;
-    UNUSED u8 filler[16];
+    UNUSED u8 filler[12];
 
     play_camera_buzz_if_c_sideways();
 
-    // Don't move closer to mario in these areas
+    // Don't move closer to Mario in these areas
     switch (gCurrLevelArea) {
         case AREA_RR:
             scaleToMario = 0.f;
@@ -1498,7 +1560,7 @@ s32 update_boss_fight_camera(struct Camera *c, Vec3f focus, Vec3f pos) {
     }
 
     yaw = sModeOffsetYaw + DEGREES(45);
-    // Get boss's position and whether mario is holding it.
+    // Get boss's position and whether Mario is holding it.
     if ((o = gSecondCameraFocus) != NULL) {
         object_pos_to_vec3f(secondFocus, o);
         heldState = o->oHeldState;
@@ -1523,7 +1585,7 @@ s32 update_boss_fight_camera(struct Camera *c, Vec3f focus, Vec3f pos) {
         offset_rotated(secondFocus, sMarioCamState->pos, holdFocOffset, sMarioCamState->faceAngle);
     }
 
-    // Set the camera focus to the average of mario and secondFocus
+    // Set the camera focus to the average of Mario and secondFocus
     focus[0] = (sMarioCamState->pos[0] + secondFocus[0]) / 2.f;
     focus[1] = (sMarioCamState->pos[1] + secondFocus[1]) / 2.f + 125.f;
     focus[2] = (sMarioCamState->pos[2] + secondFocus[2]) / 2.f;
@@ -1548,10 +1610,9 @@ s32 update_boss_fight_camera(struct Camera *c, Vec3f focus, Vec3f pos) {
         }
     }
 
+    //! Must be same line to match EU
     // Prevent the camera from going to the ground in the outside boss fight
-    if (gCurrLevelNum == LEVEL_BBH) {
-        pos[1] = 2047.f;
-    }
+    if (gCurrLevelNum == LEVEL_BBH) { pos[1] = 2047.f; }
 
     // Rotate from C-Button input
     if (sCSideButtonYaw < 0) {
@@ -1586,7 +1647,7 @@ s32 update_boss_fight_camera(struct Camera *c, Vec3f focus, Vec3f pos) {
     // Move the camera position back as sLakituDist and sLakituPitch increase.
     // This doesn't zoom out of bounds because pos is set above each frame.
     // The constant 0x1000 doubles the pitch from the center when sLakituPitch is 0
-    // When lakitu is fully zoomed out, the pitch comes to 0x3800, or 78.75 degrees, up from the focus.
+    // When Lakitu is fully zoomed out, the pitch comes to 0x3800, or 78.75 degrees, up from the focus.
     vec3f_set_dist_and_angle(pos, pos, sLakituDist, sLakituPitch + 0x1000, yaw);
 
     return yaw;
@@ -1644,7 +1705,7 @@ struct ParallelTrackingPoint sBBHLibraryParTrackPath[] = {
 s32 unused_update_mode_5_camera(UNUSED struct Camera *c, UNUSED Vec3f focus, UNUSED Vec3f pos) {
 }
 
-void unused_80282678(UNUSED s32 unused) {
+static void stub_camera_1(UNUSED s32 unused) {
 }
 
 void mode_boss_fight_camera(struct Camera *c) {
@@ -1666,7 +1727,7 @@ void mode_parallel_tracking_camera(struct Camera *c) {
 }
 
 /**
- * Fixed camera mode, the camera rotates around a point and looks and zooms toward mario.
+ * Fixed camera mode, the camera rotates around a point and looks and zooms toward Mario.
  */
 void mode_fixed_camera(struct Camera *c) {
     UNUSED u8 unused[8];
@@ -1703,7 +1764,7 @@ s32 update_behind_mario_camera(struct Camera *c, Vec3f focus, Vec3f pos) {
     f32 maxDist = 800.f;
     f32 focYOff = 125.f;
 
-    // Zoom in when mario R_TRIG mode is active
+    // Zoom in when Mario R_TRIG mode is active
     if (sSelectionFlags & CAM_MODE_MARIO_ACTIVE) {
         maxDist = 350.f;
         focYOff = 120.f;
@@ -1712,7 +1773,7 @@ s32 update_behind_mario_camera(struct Camera *c, Vec3f focus, Vec3f pos) {
         pitchInc = 128;
     }
 
-    // Focus on mario
+    // Focus on Mario
     vec3f_copy(focus, sMarioCamState->pos);
     c->focus[1] += focYOff;
     //! @bug unnecessary
@@ -1831,7 +1892,7 @@ s32 update_behind_mario_camera(struct Camera *c, Vec3f focus, Vec3f pos) {
 }
 
 /**
- * "Behind Mario" mode: used when mario is flying, on the water's surface, or shot from a cannon
+ * "Behind Mario" mode: used when Mario is flying, on the water's surface, or shot from a cannon
  */
 s32 mode_behind_mario(struct Camera *c) {
     struct MarioState *marioState = &gMarioStates[0];
@@ -1884,7 +1945,7 @@ s32 mode_behind_mario(struct Camera *c) {
 /**
  * Update the camera in slide and hoot mode.
  *
- * In slide mode, keep the camera 800 units from mario
+ * In slide mode, keep the camera 800 units from Mario
  */
 s16 update_slide_camera(struct Camera *c) {
     struct Surface *floor;
@@ -1909,7 +1970,7 @@ s16 update_slide_camera(struct Camera *c) {
     // No C-Button input in this mode, notify the player with a buzzer
     play_camera_buzz_if_cbutton();
 
-    // Focus on mario
+    // Focus on Mario
     vec3f_copy(c->focus, sMarioCamState->pos);
     c->focus[1] += 50.f;
 
@@ -1989,7 +2050,7 @@ s32 update_mario_camera(UNUSED struct Camera *c, Vec3f focus, Vec3f pos) {
 /**
  * Update the camera in default, close, and free roam mode
  *
- * The camera moves behind mario, and can rotate all the way around
+ * The camera moves behind Mario, and can rotate all the way around
  */
 s16 update_default_camera(struct Camera *c) {
     Vec3f tempPos;
@@ -2031,9 +2092,9 @@ s16 update_default_camera(struct Camera *c) {
     handle_c_button_movement(c);
     vec3f_get_dist_and_angle(sMarioCamState->pos, c->pos, &dist, &pitch, &yaw);
 
-    // If C-Down is active, determine what distance the camera should be from mario
+    // If C-Down is active, determine what distance the camera should be from Mario
     if (gCameraMovementFlags & CAM_MOVE_ZOOMED_OUT) {
-        //! In Mario mode, the camera is zoomed out further than in lakitu mode (1400 vs 1200)
+        //! In Mario mode, the camera is zoomed out further than in Lakitu mode (1400 vs 1200)
         if (set_cam_angle(0) == CAM_ANGLE_MARIO) {
             zoomDist = gCameraZoomDist + 1050;
         } else {
@@ -2106,7 +2167,7 @@ s16 update_default_camera(struct Camera *c) {
             sStatusFlags |= CAM_FLAG_BLOCK_SMOOTH_MOVEMENT;
         }
     } else if (xzDist < 250) {
-        // Turn rapidly if very close to mario
+        // Turn rapidly if very close to Mario
         c->pos[0] += (250 - xzDist) * sins(yaw);
         c->pos[2] += (250 - xzDist) * coss(yaw);
         if (sCSideButtonYaw == 0) {
@@ -2124,7 +2185,7 @@ s16 update_default_camera(struct Camera *c) {
     calc_y_to_curr_floor(&posHeight, 1, 200, &focHeight, 0.9f, 200);
     vec3f_copy(cPos, c->pos);
     avoidStatus = rotate_camera_around_walls(c, cPos, &avoidYaw, 0x600);
-    // If a wall is blocking the view of mario, then rotate in the calculated direction
+    // If a wall is blocking the view of Mario, then rotate in the calculated direction
     if (avoidStatus == 3) {
         unusedFreeRoamWallYaw = avoidYaw;
         sAvoidYawVel = yaw;
@@ -2161,7 +2222,7 @@ s16 update_default_camera(struct Camera *c) {
         if (avoidStatus != 0) {
             yawVel += yawVel;
         }
-        // ...Unless the camera already rotated from being close to mario
+        // ...Unless the camera already rotated from being close to Mario
         if ((closeToMario & 1) && avoidStatus != 0) {
             yawVel = 0;
         }
@@ -2170,7 +2231,7 @@ s16 update_default_camera(struct Camera *c) {
         }
     }
 
-    // Only zoom out if not obstructed by walls and lakitu hasn't collided with any
+    // Only zoom out if not obstructed by walls and Lakitu hasn't collided with any
     if (avoidStatus == 0 && !(sStatusFlags & CAM_FLAG_COLLIDED_WITH_WALL)) {
         approach_f32_asymptotic_bool(&dist, zoomDist - 100.f, 0.05f);
     }
@@ -2198,7 +2259,7 @@ s16 update_default_camera(struct Camera *c) {
         }
     }
 
-    // Lower the camera in mario mode
+    // Lower the camera in Mario mode
     if (sSelectionFlags & CAM_MODE_MARIO_ACTIVE) {
         marioFloorHeight -= 35.f;
         camFloorHeight -= 35.f;
@@ -2255,7 +2316,7 @@ s16 update_default_camera(struct Camera *c) {
         }
     }
 
-    // Make lakitu fly above the gas
+    // Make Lakitu fly above the gas
     gasHeight = find_poison_gas_level(cPos[0], cPos[2]);
     if (gasHeight != -11000.f) {
         if ((gasHeight += 130.f) > c->pos[1]) {
@@ -2333,7 +2394,7 @@ void mode_lakitu_camera(struct Camera *c) {
 }
 
 /**
- * When no other mode is active and the current R button mode is mario
+ * When no other mode is active and the current R button mode is Mario
  */
 void mode_mario_camera(struct Camera *c) {
     gCameraZoomDist = 350.f;
@@ -2349,7 +2410,7 @@ s32 update_spiral_stairs_camera(struct Camera *c, Vec3f focus, Vec3f pos) {
     s16 camYaw;
     // unused
     s16 focPitch;
-    /// The focus (mario)'s yaw around the stairs
+    /// The focus (Mario)'s yaw around the stairs
     s16 focYaw;
     // unused
     s16 posPitch;
@@ -2369,7 +2430,7 @@ s32 update_spiral_stairs_camera(struct Camera *c, Vec3f focus, Vec3f pos) {
     // Set base pos to the center of the staircase
     vec3f_set(sFixedModeBasePosition, -1280.f, 614.f, 1740.f);
 
-    // Focus on mario, and move the focus up the staircase with him
+    // Focus on Mario, and move the focus up the staircase with him
     calc_y_to_curr_floor(&focusHeight, 1.f, 200.f, &focusHeight, 0.9f, 200.f);
     focus[0] = sMarioCamState->pos[0];
     focY = sMarioCamState->pos[1] + 125.f + focusHeight;
@@ -2380,7 +2441,7 @@ s32 update_spiral_stairs_camera(struct Camera *c, Vec3f focus, Vec3f pos) {
     vec3f_get_dist_and_angle(sFixedModeBasePosition, cPos, &dist, &posPitch, &posYaw);
 
     sSpiralStairsYawOffset = posYaw - focYaw;
-    // posYaw will change if mario is more than 90 degrees around the stairs, relative to the camera
+    // posYaw will change if Mario is more than 90 degrees around the stairs, relative to the camera
     if (sSpiralStairsYawOffset < DEGREES(-90)) {
         sSpiralStairsYawOffset = DEGREES(-90);
     }
@@ -2438,7 +2499,7 @@ static UNUSED void unused_mode_0f_camera(struct Camera *c) {
 
 /**
  * Slide/hoot mode.
- * In this mode, the camera is always at the back of mario, because mario generally only moves forward.
+ * In this mode, the camera is always at the back of Mario, because Mario generally only moves forward.
  */
 void mode_slide_camera(struct Camera *c) {
     if (sMarioGeometry.currFloorType == SURFACE_CLOSE_CAMERA ||
@@ -2455,7 +2516,7 @@ void mode_slide_camera(struct Camera *c) {
 void store_lakitu_cam_info_for_c_up(struct Camera *c) {
     vec3f_copy(sCameraStoreCUp.pos, c->pos);
     vec3f_sub(sCameraStoreCUp.pos, sMarioCamState->pos);
-    // Only store the y value, and as an offset from mario, for some reason
+    // Only store the y value, and as an offset from Mario, for some reason
     vec3f_set(sCameraStoreCUp.focus, 0.f, c->focus[1] - sMarioCamState->pos[1], 0.f);
 }
 
@@ -2515,14 +2576,14 @@ s32 exit_c_up(struct Camera *c) {
         if (sModeInfo.lastMode == CAMERA_MODE_SPIRAL_STAIRS || sModeInfo.lastMode == CAMERA_MODE_CLOSE
             || sModeInfo.lastMode == CAMERA_MODE_FREE_ROAM) {
             searching = 1;
-            // Check the whole circle around mario for an open direction to zoom out to
+            // Check the whole circle around Mario for an open direction to zoom out to
             for (sector = 0; sector < 16 && searching == 1; sector++) {
                 vec3f_set_dist_and_angle(checkFoc, curPos, curDist, 0, curYaw + checkYaw);
 
                 // If there are no walls this way,
                 if (f32_find_wall_collision(&curPos[0], &curPos[1], &curPos[2], 20.f, 50.f) == 0) {
 
-                    // Start close to mario, check for walls, floors, and ceilings all the way to the
+                    // Start close to Mario, check for walls, floors, and ceilings all the way to the
                     // zoomed out distance
                     for (d = curDist; d < gCameraZoomDist; d += 20.f) {
                         vec3f_set_dist_and_angle(checkFoc, curPos, d, 0, curYaw + checkYaw);
@@ -2592,7 +2653,7 @@ s32 update_c_up(UNUSED struct Camera *c, Vec3f focus, Vec3f pos) {
 }
 
 /**
- * Make mario's head move in C-Up mode.
+ * Make Mario's head move in C-Up mode.
  */
 void move_mario_head_c_up(UNUSED struct Camera *c) {
     UNUSED s16 pitch = sCUpCameraPitch;
@@ -2618,7 +2679,7 @@ void move_mario_head_c_up(UNUSED struct Camera *c) {
         sModeOffsetYaw = -0x5555;
     }
 
-    // Give mario's neck natural-looking constraints
+    // Give Mario's neck natural-looking constraints
     sMarioCamState->headRotation[0] = sCUpCameraPitch * 3 / 4;
     sMarioCamState->headRotation[1] = sModeOffsetYaw * 3 / 4;
 }
@@ -2660,7 +2721,7 @@ void move_into_c_up(struct Camera *c) {
  * The main update function for C-Up mode
  */
 s32 mode_c_up_camera(struct Camera *c) {
-    UNUSED u8 unused[16];
+    UNUSED u8 unused[12];
 
     // Play a sound when entering C-Up mode
     if (!(sCameraSoundFlags & CAM_SOUND_C_UP_PLAYED)) {
@@ -2687,7 +2748,7 @@ s32 mode_c_up_camera(struct Camera *c) {
             vec3f_add(c->pos, sMarioCamState->pos);
             vec3f_copy(c->focus, sCameraStoreCUp.focus);
             vec3f_add(c->focus, sMarioCamState->pos);
-            // Make mario look forward
+            // Make Mario look forward
             camera_approach_s16_symmetric_bool(&sMarioCamState->headRotation[0], 0, 1024);
             camera_approach_s16_symmetric_bool(&sMarioCamState->headRotation[1], 0, 1024);
         } else {
@@ -2705,7 +2766,7 @@ s32 mode_c_up_camera(struct Camera *c) {
 }
 
 /**
- * Used when mario is in a cannon.
+ * Used when Mario is in a cannon.
  */
 s32 update_in_cannon(UNUSED struct Camera *c, Vec3f focus, Vec3f pos) {
     focus_on_mario(pos, focus, 125.f + sCannonYOffset, 125.f, 800.f,
@@ -2714,8 +2775,8 @@ s32 update_in_cannon(UNUSED struct Camera *c, Vec3f focus, Vec3f pos) {
 }
 
 /**
- * Updates the camera when mario is in a cannon.
- * sCannonYOffset is used to make the camera rotate down when mario has just entered the cannon
+ * Updates the camera when Mario is in a cannon.
+ * sCannonYOffset is used to make the camera rotate down when Mario has just entered the cannon
  */
 void mode_cannon_camera(struct Camera *c) {
     UNUSED u8 unused[24];
@@ -2725,8 +2786,8 @@ void mode_cannon_camera(struct Camera *c) {
     c->nextYaw = update_in_cannon(c, c->focus, c->pos);
     if (gPlayer1Controller->buttonPressed & A_BUTTON) {
         set_camera_mode(c, CAMERA_MODE_BEHIND_MARIO, 1);
-        sPanDistance = 0;
-        sCannonYOffset = 0;
+        sPanDistance = 0.f;
+        sCannonYOffset = 0.f;
         sStatusFlags &= ~CAM_FLAG_BLOCK_SMOOTH_MOVEMENT;
     } else {
         sCannonYOffset = approach_f32(sCannonYOffset, 0.f, 100.f, 100.f);
@@ -2734,9 +2795,9 @@ void mode_cannon_camera(struct Camera *c) {
 }
 
 /**
- * Cause lakitu to fly to the next Camera position and focus over a number of frames.
+ * Cause Lakitu to fly to the next Camera position and focus over a number of frames.
  *
- * At the end of each frame, lakitu's position and focus ("state") are stored.
+ * At the end of each frame, Lakitu's position and focus ("state") are stored.
  * Calling this function makes next_lakitu_state() fly from the last frame's state to the
  * current frame's calculated state.
  *
@@ -2777,7 +2838,7 @@ void transition_to_camera_mode(struct Camera *c, s16 newMode, s16 numFrames) {
 }
 
 /**
- * Used to change the camera mode between its default/previous and certain mario-oriented modes,
+ * Used to change the camera mode between its default/previous and certain Mario-oriented modes,
  *      namely: C_UP, WATER_SURFACE, CLOSE, and BEHIND_MARIO
  *
  * Stores the current pos and focus in sModeInfo->transitionStart, and
@@ -2837,7 +2898,7 @@ void set_camera_mode(struct Camera *c, s16 mode, s16 frames) {
 }
 
 /**
- * Updates lakitu's position/focus and applies camera shakes.
+ * Updates Lakitu's position/focus and applies camera shakes.
  */
 void update_lakitu(struct Camera *c) {
     struct Surface *floor = NULL;
@@ -2872,14 +2933,14 @@ void update_lakitu(struct Camera *c) {
         vec3f_copy(gLakituState.goalPos, c->pos);
         vec3f_copy(gLakituState.goalFocus, c->focus);
 
-        // Simulate lakitu flying to the new position and turning towards the new focus
+        // Simulate Lakitu flying to the new position and turning towards the new focus
         set_or_approach_vec3f_asymptotic(gLakituState.curPos, newPos,
                                          gLakituState.posHSpeed, gLakituState.posVSpeed,
                                          gLakituState.posHSpeed);
         set_or_approach_vec3f_asymptotic(gLakituState.curFocus, newFoc,
                                          gLakituState.focHSpeed, gLakituState.focVSpeed,
                                          gLakituState.focHSpeed);
-        // Adjust lakitu's speed back to normal
+        // Adjust Lakitu's speed back to normal
         set_or_approach_f32_asymptotic(&gLakituState.focHSpeed, 0.8f, 0.05f);
         set_or_approach_f32_asymptotic(&gLakituState.focVSpeed, 0.3f, 0.05f);
         set_or_approach_f32_asymptotic(&gLakituState.posHSpeed, 0.3f, 0.05f);
@@ -2990,7 +3051,7 @@ void update_camera(struct Camera *c) {
     c->defMode = gLakituState.defMode;
 
     camera_course_processing(c);
-    dummy_802877EC(c);
+    stub_camera_3(c);
     sCButtonsPressed = find_c_buttons_pressed(sCButtonsPressed, gPlayer1Controller->buttonPressed,
                                               gPlayer1Controller->buttonDown);
 
@@ -3092,9 +3153,9 @@ void update_camera(struct Camera *c) {
             }
         }
     }
-    // Start any mario-related cutscenes
+    // Start any Mario-related cutscenes
     start_cutscene(c, get_cutscene_from_mario_status(c));
-    dummy_802877D8(c);
+    stub_camera_2(c);
     gCheckingSurfaceCollisionsForCamera = FALSE;
     if (gCurrLevelNum != LEVEL_CASTLE) {
         // If fixed camera is selected as the alternate mode, then fix the camera as long as the right
@@ -3111,8 +3172,8 @@ void update_camera(struct Camera *c) {
                 play_sound_rbutton_changed();
             }
 
-            // Fixed mode only prevents lakitu from moving. The camera pos still updates, so
-            // lakitu will fly to his next position as normal whenever R_TRIG is released.
+            // Fixed mode only prevents Lakitu from moving. The camera pos still updates, so
+            // Lakitu will fly to his next position as normal whenever R_TRIG is released.
             gLakituState.posHSpeed = 0.f;
             gLakituState.posVSpeed = 0.f;
 
@@ -3284,7 +3345,7 @@ void init_camera(struct Camera *c) {
             start_cutscene(c, CUTSCENE_ENTER_BOWSER_ARENA);
             break;
 
-        //! Hardcoded position checks determine which cutscene to play when mario enters castle grounds.
+        //! Hardcoded position checks determine which cutscene to play when Mario enters castle grounds.
         case LEVEL_CASTLE_GROUNDS:
             if (is_within_100_units_of_mario(-1328.f, 260.f, 4664.f) != 1) {
                 marioOffset[0] = -400.f;
@@ -3343,7 +3404,7 @@ void init_camera(struct Camera *c) {
             break;
     }
 
-    // Set the camera pos to marioOffset (relative to mario), added to mario's position
+    // Set the camera pos to marioOffset (relative to Mario), added to Mario's position
     offset_rotated(c->pos, sMarioCamState->pos, marioOffset, sMarioCamState->faceAngle);
     if (c->mode != CAMERA_MODE_BEHIND_MARIO) {
         c->pos[1] = find_floor(sMarioCamState->pos[0], sMarioCamState->pos[1] + 100.f,
@@ -3394,11 +3455,11 @@ void zoom_out_if_paused_and_outside(struct GraphNodeCamera *camera) {
         areaBit = 0;
     }
     if (gCameraMovementFlags & CAM_MOVE_PAUSE_SCREEN) {
-        if (sFramesPaused > 1) {
+        if (sFramesPaused >= 2) {
             if (sZoomOutAreaMasks[areaMaskIndex] & areaBit) {
 
                 camera->focus[0] = gCamera->areaCenX;
-                camera->focus[1] = (sMarioCamState->pos[1] + gCamera->areaCenY) / 2.f;
+                camera->focus[1] = (sMarioCamState->pos[1] + gCamera->areaCenY) / 2;
                 camera->focus[2] = gCamera->areaCenZ;
                 vec3f_get_dist_and_angle(camera->focus, sMarioCamState->pos, &dist, &pitch, &yaw);
                 vec3f_set_dist_and_angle(sMarioCamState->pos, camera->pos, 6000.f, 0x1000, yaw);
@@ -3439,7 +3500,7 @@ void create_camera(struct GraphNodeCamera *gc, struct AllocOnlyPool *pool) {
 }
 
 /**
- * Copy lakitu's pos and foc into `gc`
+ * Copy Lakitu's pos and foc into `gc`
  */
 void update_graph_node_camera(struct GraphNodeCamera *gc) {
     UNUSED u8 unused[8];
@@ -3466,10 +3527,10 @@ Gfx *geo_camera_main(s32 callContext, struct GraphNode *g, void *context) {
     return NULL;
 }
 
-void dummy_802877D8(UNUSED struct Camera *c) {
+void stub_camera_2(UNUSED struct Camera *c) {
 }
 
-void dummy_802877EC(UNUSED struct Camera *c) {
+void stub_camera_3(UNUSED struct Camera *c) {
 }
 
 void vec3f_sub(Vec3f dst, Vec3f src) {
@@ -3616,7 +3677,7 @@ s32 move_point_along_spline(Vec3f p, struct CutsceneSplinePoint spline[], s16 *s
 
 /**
  * If `selection` is 0, just get the current selection
- * If `selection` is 1, select 'mario' as the alt mode.
+ * If `selection` is 1, select 'Mario' as the alt mode.
  * If `selection` is 2, select 'fixed' as the alt mode.
  *
  * @return the current selection
@@ -3646,16 +3707,16 @@ s32 cam_select_alt_mode(s32 selection) {
 }
 
 /**
- * Sets the camera angle to either lakitu or mario mode. Returns the current mode.
+ * Sets the camera angle to either Lakitu or Mario mode. Returns the current mode.
  *
  * If `mode` is 0, just returns the current mode.
- * If `mode` is 1, start mario mode
- * If `mode` is 2, start lakitu mode
+ * If `mode` is 1, start Mario mode
+ * If `mode` is 2, start Lakitu mode
  */
 s32 set_cam_angle(s32 mode) {
     s32 curMode = CAM_ANGLE_LAKITU;
 
-    // Switch to mario mode
+    // Switch to Mario mode
     if (mode == CAM_ANGLE_MARIO && !(sSelectionFlags & CAM_MODE_MARIO_ACTIVE)) {
         sSelectionFlags |= CAM_MODE_MARIO_ACTIVE;
         if (gCameraMovementFlags & CAM_MOVE_ZOOMED_OUT) {
@@ -3756,7 +3817,7 @@ void shake_camera_handheld(Vec3f pos, Vec3f focus) {
             sHandheldShakeTimer -= 1.f;
 
             // Code dead, this is set to be 0 before it is used.
-            sHandheldShakeInc = RandomFloat() * 0.5f;
+            sHandheldShakeInc = random_float() * 0.5f;
             if (sHandheldShakeInc < 0.02f) {
                 sHandheldShakeInc = 0.02f;
             }
@@ -4176,15 +4237,15 @@ void random_vec3s(Vec3s dst, s16 xRange, s16 yRange, s16 zRange) {
     f32 tempYRange;
     f32 tempZRange;
 
-    randomFloat = RandomFloat();
+    randomFloat = random_float();
     tempXRange = xRange;
     dst[0] = randomFloat * tempXRange - tempXRange / 2;
 
-    randomFloat = RandomFloat();
+    randomFloat = random_float();
     tempYRange = yRange;
     dst[1] = randomFloat * tempYRange - tempYRange / 2;
 
-    randomFloat = RandomFloat();
+    randomFloat = random_float();
     tempZRange = zRange;
     dst[2] = randomFloat * tempZRange - tempZRange / 2;
 }
@@ -4203,7 +4264,7 @@ s16 reduce_by_dist_from_camera(s16 value, f32 maxDist, f32 posX, f32 posY, f32 p
     s16 goalPitch;
     s16 goalYaw;
     s16 result = 0;
-    // Direction from pos to (lakitu's) goalPos
+    // Direction from pos to (Lakitu's) goalPos
     f32 goalDX = gLakituState.goalPos[0] - posX;
     f32 goalDY = gLakituState.goalPos[1] - posY;
     f32 goalDZ = gLakituState.goalPos[2] - posZ;
@@ -4216,8 +4277,8 @@ s16 reduce_by_dist_from_camera(s16 value, f32 maxDist, f32 posX, f32 posY, f32 p
         vec3f_get_dist_and_angle(gLakituState.goalPos, pos, &dist, &pitch, &yaw);
         if (dist < maxDist) {
             calculate_angles(gLakituState.goalPos, gLakituState.goalFocus, &goalPitch, &goalYaw);
-            pitch -= goalPitch;
-            yaw -= goalYaw;
+            //! Must be same line to match EU
+            pitch -= goalPitch; yaw -= goalYaw;
             dist -= 2000.f;
             if (dist < 0.f) {
                 dist = 0.f;
@@ -4256,11 +4317,11 @@ s32 clamp_positions_and_find_yaw(Vec3f pos, Vec3f origin, f32 xMax, f32 xMin, f3
 }
 
 /**
- * The yaw passed here is the yaw of the direction FROM mario TO lakitu.
+ * The yaw passed here is the yaw of the direction FROM Mario TO Lakitu.
  *
  * wallYaw always has 90 degrees added to it before this is called -- it's parallel to the wall.
  *
- * @return the new yaw from mario to rotate towards.
+ * @return the new yaw from Mario to rotate towards.
  *
  * @warning this is jank. It actually returns the yaw that will rotate further INTO the wall. So, the
  *          developers just add 180 degrees to the result.
@@ -4687,7 +4748,7 @@ s32 offset_yaw_outward_radial(struct Camera *c, s16 areaYaw) {
         case AREA_SSL_PYRAMID:
             // This mask splits the 360 degrees of yaw into 4 corners. It adds 45 degrees so that the yaw
             // offset at the corner will be 0, but the yaw offset near the center will face more towards
-            // the direction mario is running in.
+            // the direction Mario is running in.
             yawGoal = (areaYaw & 0xC000) - areaYaw + DEGREES(45);
             if (yawGoal < 0) {
                 yawGoal = -yawGoal;
@@ -4707,7 +4768,7 @@ s32 offset_yaw_outward_radial(struct Camera *c, s16 areaYaw) {
         camera_approach_s16_symmetric_bool(&yaw, yawGoal, dYaw);
     }
     // When the final yaw is out of [-60,60] degrees, approach yawGoal faster than dYaw will ever be,
-    // making the camera lock in one direction until yawGoal drops below 60 (or mario presses a C button)
+    // making the camera lock in one direction until yawGoal drops below 60 (or Mario presses a C button)
     if (yaw < -DEGREES(60)) {
         //! Maybe they meant to reverse yawGoal's sign?
         camera_approach_s16_symmetric_bool(&yaw, -yawGoal, 0x200);
@@ -4723,14 +4784,14 @@ s32 offset_yaw_outward_radial(struct Camera *c, s16 areaYaw) {
  * Plays the background music that starts while peach reads the intro message.
  */
 void cutscene_intro_peach_play_message_music(void) {
-    play_music(0, SEQUENCE_ARGS(4, SEQ_EVENT_PEACH_MESSAGE), 0);
+    play_music(SEQ_PLAYER_LEVEL, SEQUENCE_ARGS(4, SEQ_EVENT_PEACH_MESSAGE), 0);
 }
 
 /**
- * Plays the music that starts after peach fades and lakitu appears.
+ * Plays the music that starts after peach fades and Lakitu appears.
  */
 void cutscene_intro_peach_play_lakitu_flying_music(void) {
-    play_music(0, SEQUENCE_ARGS(15, SEQ_EVENT_CUTSCENE_INTRO), 0);
+    play_music(SEQ_PLAYER_LEVEL, SEQUENCE_ARGS(15, SEQ_EVENT_CUTSCENE_INTRO), 0);
 }
 
 void play_camera_buzz_if_cdown(void) {
@@ -5026,7 +5087,7 @@ s32 determine_dance_cutscene(UNUSED struct Camera *c) {
 }
 
 /**
- * @return `pullResult` or `pushResult` depending on mario's door action
+ * @return `pullResult` or `pushResult` depending on Mario's door action
  */
 u8 open_door_cutscene(u8 pullResult, u8 pushResult) {
     s16 result;
@@ -5041,7 +5102,7 @@ u8 open_door_cutscene(u8 pullResult, u8 pushResult) {
 }
 
 /**
- * If no cutscenes are playing, determines if a cutscene should play based on mario's action and
+ * If no cutscenes are playing, determines if a cutscene should play based on Mario's action and
  * cameraEvent
  *
  * @return the cutscene that should start, 0 if none
@@ -5179,7 +5240,7 @@ u8 get_cutscene_from_mario_status(struct Camera *c) {
 }
 
 /**
- * Moves the camera when mario has triggered a warp
+ * Moves the camera when Mario has triggered a warp
  */
 void warp_camera(f32 displacementX, f32 displacementY, f32 displacementZ) {
     Vec3f displacement;
@@ -5223,16 +5284,16 @@ void approach_camera_height(struct Camera *c, f32 goal, f32 inc) {
     }
 }
 
-void unused_8028C3AC(UNUSED s32 a, UNUSED s32 b, UNUSED s32 c, UNUSED s32 d) {
+void stub_camera_4(UNUSED s32 a, UNUSED s32 b, UNUSED s32 c, UNUSED s32 d) {
 }
 
 /**
- * Set the camera's focus to mario's position, and add several relative offsets.
+ * Set the camera's focus to Mario's position, and add several relative offsets.
  *
- * @param leftRight offset to mario's left/right, relative to his faceAngle
+ * @param leftRight offset to Mario's left/right, relative to his faceAngle
  * @param yOff y offset
- * @param forwBack offset to mario's front/back, relative to his faceAngle
- * @param yawOff offset to mario's faceAngle, changes the direction of `leftRight` and `forwBack`
+ * @param forwBack offset to Mario's front/back, relative to his faceAngle
+ * @param yawOff offset to Mario's faceAngle, changes the direction of `leftRight` and `forwBack`
  */
 void set_focus_rel_mario(struct Camera *c, f32 leftRight, f32 yOff, f32 forwBack, s16 yawOff) {
     s16 yaw;
@@ -5247,12 +5308,12 @@ void set_focus_rel_mario(struct Camera *c, f32 leftRight, f32 yOff, f32 forwBack
 }
 
 /**
- * Set the camera's position to mario's position, and add several relative offsets. Unused.
+ * Set the camera's position to Mario's position, and add several relative offsets. Unused.
  *
- * @param leftRight offset to mario's left/right, relative to his faceAngle
+ * @param leftRight offset to Mario's left/right, relative to his faceAngle
  * @param yOff y offset
- * @param forwBack offset to mario's front/back, relative to his faceAngle
- * @param yawOff offset to mario's faceAngle, changes the direction of `leftRight` and `forwBack`
+ * @param forwBack offset to Mario's front/back, relative to his faceAngle
+ * @param yawOff offset to Mario's faceAngle, changes the direction of `leftRight` and `forwBack`
  */
 static void unused_set_pos_rel_mario(struct Camera *c, f32 leftRight, f32 yOff, f32 forwBack, s16 yawOff) {
     u16 yaw = sMarioCamState->faceAngle[1] + yawOff;
@@ -5308,11 +5369,11 @@ void determine_pushing_or_pulling_door(s16 *rotation) {
 }
 
 /**
- * Calculate lakitu's next position and focus, according to gCamera's state,
+ * Calculate Lakitu's next position and focus, according to gCamera's state,
  * and store them in `newPos` and `newFoc`.
  *
- * @param newPos where lakitu should fly towards this frame
- * @param newFoc where lakitu should look towards this frame
+ * @param newPos where Lakitu should fly towards this frame
+ * @param newFoc where Lakitu should look towards this frame
  *
  * @param curPos gCamera's pos this frame
  * @param curFoc gCamera's foc this frame
@@ -5320,7 +5381,7 @@ void determine_pushing_or_pulling_door(s16 *rotation) {
  * @param oldPos gCamera's pos last frame
  * @param oldFoc gCamera's foc last frame
  *
- * @return lakitu's next yaw, which is the same as the yaw passed in if no transition happened
+ * @return Lakitu's next yaw, which is the same as the yaw passed in if no transition happened
  */
 s16 next_lakitu_state(Vec3f newPos, Vec3f newFoc, Vec3f curPos, Vec3f curFoc,
                       Vec3f oldPos, Vec3f oldFoc, s16 yaw) {
@@ -5350,7 +5411,7 @@ s16 next_lakitu_state(Vec3f newPos, Vec3f newFoc, Vec3f curPos, Vec3f curFoc,
 
     if (sStatusFlags & CAM_FLAG_START_TRANSITION) {
         for (i = 0; i < 3; i++) {
-            // Add mario's displacement from this frame to the last frame's pos and focus
+            // Add Mario's displacement from this frame to the last frame's pos and focus
             // Makes the transition start from where the camera would have moved
             startPos[i] = oldPos[i] + sMarioCamState->pos[i] - sModeTransition.marioPos[i];
             startFoc[i] = oldFoc[i] + sMarioCamState->pos[i] - sModeTransition.marioPos[i];
@@ -5474,7 +5535,7 @@ void set_camera_mode_close_cam(u8 *mode) {
 
 /**
  * Change to radial mode.
- * If the difference in yaw between pos -> mario and pos > focus is < 90 degrees, transition.
+ * If the difference in yaw between pos -> Mario and pos > focus is < 90 degrees, transition.
  * Otherwise jump to radial mode.
  */
 void set_camera_mode_radial(struct Camera *c, s16 transitionTime) {
@@ -5507,9 +5568,9 @@ void parallel_tracking_init(struct Camera *c, struct ParallelTrackingPoint *path
         sParTrackTransOff.pos[1] = 0.f;
         sParTrackTransOff.pos[2] = 0.f;
         // Place the camera in the middle of the path
-        c->pos[0] = (sParTrackPath[0].pos[0] + sParTrackPath[1].pos[0]) / 2.f;
-        c->pos[1] = (sParTrackPath[0].pos[1] + sParTrackPath[1].pos[1]) / 2.f;
-        c->pos[2] = (sParTrackPath[0].pos[2] + sParTrackPath[1].pos[2]) / 2.f;
+        c->pos[0] = (sParTrackPath[0].pos[0] + sParTrackPath[1].pos[0]) / 2;
+        c->pos[1] = (sParTrackPath[0].pos[1] + sParTrackPath[1].pos[1]) / 2;
+        c->pos[2] = (sParTrackPath[0].pos[2] + sParTrackPath[1].pos[2]) / 2;
         sStatusFlags &= ~CAM_FLAG_SMOOTH_MOVEMENT;
         c->mode = CAMERA_MODE_PARALLEL_TRACKING;
     }
@@ -5533,11 +5594,11 @@ void set_fixed_cam_axis_sa_lobby(UNUSED s16 preset) {
 /**
  * Block area-specific CameraTrigger and special surface modes.
  * Generally, block area mode changes if:
- *      Mario is wearing the metal cap, or at the water's surface, or the camera is in mario mode
+ *      Mario is wearing the metal cap, or at the water's surface, or the camera is in Mario mode
  *
  * However, if the level is WDW, DDD, or COTMC (levels that have metal cap and water):
- *      Only block area mode changes if mario is in a cannon,
- *      or if the camera is in mario mode and mario is not swimming or in water with the metal cap
+ *      Only block area mode changes if Mario is in a cannon,
+ *      or if the camera is in Mario mode and Mario is not swimming or in water with the metal cap
  */
 void check_blocking_area_processing(const u8 *mode) {
     if (sMarioCamState->action & ACT_FLAG_METAL_WATER ||
@@ -5556,12 +5617,12 @@ void check_blocking_area_processing(const u8 *mode) {
     }
 }
 
-CmdRet cam_rr_exit_building_side(struct Camera *c) {
+BAD_RETURN(s32) cam_rr_exit_building_side(struct Camera *c) {
     set_camera_mode_8_directions(c);
     s8DirModeBaseYaw = DEGREES(90);
 }
 
-CmdRet cam_rr_exit_building_top(struct Camera *c) {
+BAD_RETURN(s32) cam_rr_exit_building_top(struct Camera *c) {
     set_camera_mode_8_directions(c);
     if (c->pos[1] < 6343.f) {
         c->pos[1] = 7543.f;
@@ -5571,13 +5632,13 @@ CmdRet cam_rr_exit_building_top(struct Camera *c) {
     }
 }
 
-CmdRet cam_rr_enter_building_window(struct Camera *c) {
+BAD_RETURN(s32) cam_rr_enter_building_window(struct Camera *c) {
     if (c->mode != CAMERA_MODE_FIXED) {
         set_camera_mode_fixed(c, -2974, 478, -3975);
     }
 }
 
-CmdRet cam_rr_enter_building(struct Camera *c) {
+BAD_RETURN(s32) cam_rr_enter_building(struct Camera *c) {
     if (c->mode != CAMERA_MODE_FIXED) {
         set_camera_mode_fixed(c, -2953, 798, -3943);
     }
@@ -5587,7 +5648,7 @@ CmdRet cam_rr_enter_building(struct Camera *c) {
     }
 }
 
-CmdRet cam_rr_enter_building_side(struct Camera *c) {
+BAD_RETURN(s32) cam_rr_enter_building_side(struct Camera *c) {
     if (c->mode != CAMERA_MODE_FIXED) {
         sStatusFlags &= ~CAM_FLAG_SMOOTH_MOVEMENT;
         c->mode = CAMERA_MODE_FIXED;
@@ -5595,17 +5656,17 @@ CmdRet cam_rr_enter_building_side(struct Camera *c) {
 }
 
 /**
- * Fix the camera in place as mario gets exits out the MC cave into the waterfall.
+ * Fix the camera in place as Mario gets exits out the MC cave into the waterfall.
  */
-CmdRet cam_cotmc_exit_waterfall(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cam_cotmc_exit_waterfall(UNUSED struct Camera *c) {
     gCameraMovementFlags |= CAM_MOVE_FIX_IN_PLACE;
 }
 
 /**
  * Sets 8 directional mode and blocks the next trigger from processing.
- * Activated when mario is walking in front of the snowman's head.
+ * Activated when Mario is walking in front of the snowman's head.
  */
-CmdRet cam_sl_snowman_head_8dir(struct Camera *c) {
+BAD_RETURN(s32) cam_sl_snowman_head_8dir(struct Camera *c) {
     sStatusFlags |= CAM_FLAG_BLOCK_AREA_PROCESSING;
     transition_to_camera_mode(c, CAMERA_MODE_8_DIRECTIONS, 60);
     s8DirModeBaseYaw = 0x1D27;
@@ -5615,7 +5676,7 @@ CmdRet cam_sl_snowman_head_8dir(struct Camera *c) {
  * Sets free roam mode in SL, called by a trigger that covers a large area and surrounds the 8 direction
  * trigger.
  */
-CmdRet cam_sl_free_roam(struct Camera *c) {
+BAD_RETURN(s32) cam_sl_free_roam(struct Camera *c) {
     transition_to_camera_mode(c, CAMERA_MODE_FREE_ROAM, 60);
 }
 
@@ -5633,7 +5694,7 @@ void move_camera_through_floor_while_descending(struct Camera *c, f32 height) {
     }
 }
 
-CmdRet cam_hmc_enter_maze(struct Camera *c) {
+BAD_RETURN(s32) cam_hmc_enter_maze(struct Camera *c) {
     s16 pitch, yaw;
     f32 dist;
 
@@ -5649,26 +5710,26 @@ CmdRet cam_hmc_enter_maze(struct Camera *c) {
     }
 }
 
-CmdRet cam_hmc_elevator_black_hole(struct Camera *c) {
+BAD_RETURN(s32) cam_hmc_elevator_black_hole(struct Camera *c) {
     move_camera_through_floor_while_descending(c, 1536.f);
 }
 
-CmdRet cam_hmc_elevator_maze_emergency_exit(struct Camera *c) {
+BAD_RETURN(s32) cam_hmc_elevator_maze_emergency_exit(struct Camera *c) {
     move_camera_through_floor_while_descending(c, 2355.f);
 }
 
-CmdRet cam_hmc_elevator_lake(struct Camera *c) {
+BAD_RETURN(s32) cam_hmc_elevator_lake(struct Camera *c) {
     move_camera_through_floor_while_descending(c, 1843.f);
 }
 
-CmdRet cam_hmc_elevator_maze(struct Camera *c) {
+BAD_RETURN(s32) cam_hmc_elevator_maze(struct Camera *c) {
     move_camera_through_floor_while_descending(c, 1843.f);
 }
 
 /**
  * Starts the "Enter Pyramid Top" cutscene.
  */
-CmdRet cam_ssl_enter_pyramid_top(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cam_ssl_enter_pyramid_top(UNUSED struct Camera *c) {
     start_object_cutscene_without_focus(CUTSCENE_ENTER_PYRAMID_TOP);
 }
 
@@ -5676,7 +5737,7 @@ CmdRet cam_ssl_enter_pyramid_top(UNUSED struct Camera *c) {
  * Change to close mode in the center of the pyramid. Outside this trigger, the default mode is outwards
  * radial.
  */
-CmdRet cam_ssl_pyramid_center(struct Camera *c) {
+BAD_RETURN(s32) cam_ssl_pyramid_center(struct Camera *c) {
     sStatusFlags |= CAM_FLAG_BLOCK_AREA_PROCESSING;
     transition_to_camera_mode(c, CAMERA_MODE_CLOSE, 90);
 }
@@ -5684,7 +5745,7 @@ CmdRet cam_ssl_pyramid_center(struct Camera *c) {
 /**
  * Changes the mode back to outward radial in the boss room inside the pyramid.
  */
-CmdRet cam_ssl_boss_room(struct Camera *c) {
+BAD_RETURN(s32) cam_ssl_boss_room(struct Camera *c) {
     sStatusFlags |= CAM_FLAG_BLOCK_AREA_PROCESSING;
     transition_to_camera_mode(c, CAMERA_MODE_OUTWARD_RADIAL, 90);
 }
@@ -5692,7 +5753,7 @@ CmdRet cam_ssl_boss_room(struct Camera *c) {
 /**
  * Moves the camera to through the tunnel by forcing sModeOffsetYaw
  */
-CmdRet cam_thi_move_cam_through_tunnel(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cam_thi_move_cam_through_tunnel(UNUSED struct Camera *c) {
     if (sModeOffsetYaw < DEGREES(60)) {
         sModeOffsetYaw = DEGREES(60);
     }
@@ -5701,7 +5762,7 @@ CmdRet cam_thi_move_cam_through_tunnel(UNUSED struct Camera *c) {
 /**
  * Aligns the camera to look through the tunnel
  */
-CmdRet cam_thi_look_through_tunnel(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cam_thi_look_through_tunnel(UNUSED struct Camera *c) {
     // ~82.5 degrees
     if (sModeOffsetYaw > 0x3AAA) {
         sModeOffsetYaw = 0x3AAA;
@@ -5709,32 +5770,32 @@ CmdRet cam_thi_look_through_tunnel(UNUSED struct Camera *c) {
 }
 
 /**
- * Unused. Changes the camera to radial mode when mario is on the tower.
+ * Unused. Changes the camera to radial mode when Mario is on the tower.
  *
  * @see sCamBOB for bounds.
  */
-CmdRet cam_bob_tower(struct Camera *c) {
+BAD_RETURN(s32) cam_bob_tower(struct Camera *c) {
     sStatusFlags |= CAM_FLAG_BLOCK_AREA_PROCESSING;
     transition_to_camera_mode(c, CAMERA_MODE_RADIAL, 90);
 }
 
 /**
- * Unused. Changes the camera to free roam mode when mario is not climbing the tower.
+ * Unused. Changes the camera to free roam mode when Mario is not climbing the tower.
  *
  * This is the only CameraTrigger event that uses the area == -1 feature:
  * If this was used, it would be called by default in BoB.
  *
  * @see sCamBOB
  */
-CmdRet cam_bob_default_free_roam(struct Camera *c) {
+BAD_RETURN(s32) cam_bob_default_free_roam(struct Camera *c) {
     transition_to_camera_mode(c, CAMERA_MODE_FREE_ROAM, 90);
 }
 
 /**
- * Starts the pool entrance cutscene if mario is not exiting the pool.
+ * Starts the pool entrance cutscene if Mario is not exiting the pool.
  * Used in both the castle and HMC.
  */
-CmdRet cam_castle_hmc_start_pool_cutscene(struct Camera *c) {
+BAD_RETURN(s32) cam_castle_hmc_start_pool_cutscene(struct Camera *c) {
     if ((sMarioCamState->action != ACT_SPECIAL_DEATH_EXIT)
         && (sMarioCamState->action != ACT_SPECIAL_EXIT_AIRBORNE)) {
         start_cutscene(c, CUTSCENE_ENTER_POOL);
@@ -5742,10 +5803,10 @@ CmdRet cam_castle_hmc_start_pool_cutscene(struct Camera *c) {
 }
 
 /**
- * Sets the fixed mode pos offset so that the camera faces the doorway when mario is near the entrance
+ * Sets the fixed mode pos offset so that the camera faces the doorway when Mario is near the entrance
  * to the castle lobby
  */
-CmdRet cam_castle_lobby_entrance(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cam_castle_lobby_entrance(UNUSED struct Camera *c) {
     vec3f_set(sCastleEntranceOffset, -813.f - sFixedModeBasePosition[0],
               378.f - sFixedModeBasePosition[1], 1103.f - sFixedModeBasePosition[2]);
 }
@@ -5753,11 +5814,11 @@ CmdRet cam_castle_lobby_entrance(UNUSED struct Camera *c) {
 /**
  * Make the camera look up the stairs from the 2nd to 3rd floor of the castle
  */
-CmdRet cam_castle_look_upstairs(struct Camera *c) {
+BAD_RETURN(s32) cam_castle_look_upstairs(struct Camera *c) {
     struct Surface *floor;
     f32 floorHeight = find_floor(c->pos[0], c->pos[1], c->pos[2], &floor);
 
-    // If mario is on the first few steps, fix the camera pos, making it look up
+    // If Mario is on the first few steps, fix the camera pos, making it look up
     if ((sMarioGeometry.currFloorHeight > 1229.f) && (floorHeight < 1229.f)
         && (sCSideButtonYaw == 0)) {
         vec3f_set(c->pos, -227.f, 1425.f, 1533.f);
@@ -5767,7 +5828,7 @@ CmdRet cam_castle_look_upstairs(struct Camera *c) {
 /**
  * Make the camera look down the stairs towards the basement star door
  */
-CmdRet cam_castle_basement_look_downstairs(struct Camera *c) {
+BAD_RETURN(s32) cam_castle_basement_look_downstairs(struct Camera *c) {
     struct Surface *floor;
     f32 floorHeight = find_floor(c->pos[0], c->pos[1], c->pos[2], &floor);
 
@@ -5781,7 +5842,7 @@ CmdRet cam_castle_basement_look_downstairs(struct Camera *c) {
  * Enter the fixed-mode castle lobby. A trigger for this is placed in every entrance so that the camera
  * changes to fixed mode.
  */
-CmdRet cam_castle_enter_lobby(struct Camera *c) {
+BAD_RETURN(s32) cam_castle_enter_lobby(struct Camera *c) {
     if (c->mode != CAMERA_MODE_FIXED) {
         sStatusFlags &= ~CAM_FLAG_SMOOTH_MOVEMENT;
         set_fixed_cam_axis_sa_lobby(c->mode);
@@ -5792,7 +5853,7 @@ CmdRet cam_castle_enter_lobby(struct Camera *c) {
 /**
  * Starts spiral stairs mode.
  */
-CmdRet cam_castle_enter_spiral_stairs(struct Camera *c) {
+BAD_RETURN(s32) cam_castle_enter_spiral_stairs(struct Camera *c) {
     transition_to_camera_mode(c, CAMERA_MODE_SPIRAL_STAIRS, 20);
 }
 
@@ -5800,7 +5861,7 @@ CmdRet cam_castle_enter_spiral_stairs(struct Camera *c) {
  * unused, starts close mode if the camera is in spiral stairs mode.
  * This was replaced with cam_castle_close_mode
  */
-static UNUSED CmdRet cam_castle_leave_spiral_stairs(struct Camera *c) {
+static UNUSED BAD_RETURN(s32) cam_castle_leave_spiral_stairs(struct Camera *c) {
     if (c->mode == CAMERA_MODE_SPIRAL_STAIRS) {
         transition_to_camera_mode(c, CAMERA_MODE_CLOSE, 30);
     } else {
@@ -5812,15 +5873,15 @@ static UNUSED CmdRet cam_castle_leave_spiral_stairs(struct Camera *c) {
  * The default mode when outside of the lobby and spiral staircase. A trigger for this is placed at
  * every door leaving the lobby and spiral staircase.
  */
-CmdRet cam_castle_close_mode(struct Camera *c) {
+BAD_RETURN(s32) cam_castle_close_mode(struct Camera *c) {
     set_camera_mode_close_cam(&c->mode);
 }
 
 /**
  * Functions the same as cam_castle_close_mode, but sets doorStatus so that the camera will enter
- * fixed-mode when mario leaves the room.
+ * fixed-mode when Mario leaves the room.
  */
-CmdRet cam_castle_leave_lobby_sliding_door(struct Camera *c) {
+BAD_RETURN(s32) cam_castle_leave_lobby_sliding_door(struct Camera *c) {
     cam_castle_close_mode(c);
     c->doorStatus = DOOR_ENTER_LOBBY;
 }
@@ -5828,19 +5889,19 @@ CmdRet cam_castle_leave_lobby_sliding_door(struct Camera *c) {
 /**
  * Just calls cam_castle_enter_lobby
  */
-CmdRet cam_castle_enter_lobby_sliding_door(struct Camera *c) {
+BAD_RETURN(s32) cam_castle_enter_lobby_sliding_door(struct Camera *c) {
     cam_castle_enter_lobby(c);
 }
 
-CmdRet cam_bbh_room_6(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_room_6(struct Camera *c) {
     parallel_tracking_init(c, sBBHLibraryParTrackPath);
 }
 
-CmdRet cam_bbh_fall_off_roof(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_fall_off_roof(struct Camera *c) {
     set_camera_mode_close_cam(&c->mode);
 }
 
-CmdRet cam_bbh_fall_into_pool(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_fall_into_pool(struct Camera *c) {
     Vec3f dir;
     set_camera_mode_close_cam(&c->mode);
     vec3f_set(dir, 0.f, 0.f, 300.f);
@@ -5850,24 +5911,24 @@ CmdRet cam_bbh_fall_into_pool(struct Camera *c) {
     sStatusFlags &= ~CAM_FLAG_SMOOTH_MOVEMENT;
 }
 
-CmdRet cam_bbh_room_1(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_room_1(struct Camera *c) {
     set_camera_mode_fixed(c, 956, 440, 1994);
 }
 
-CmdRet cam_bbh_leave_front_door(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_leave_front_door(struct Camera *c) {
     c->doorStatus = DOOR_LEAVING_SPECIAL;
     cam_bbh_room_1(c);
 }
 
-CmdRet cam_bbh_room_2_lower(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_room_2_lower(struct Camera *c) {
     set_camera_mode_fixed(c, 2591, 400, 1284);
 }
 
-CmdRet cam_bbh_room_4(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_room_4(struct Camera *c) {
     set_camera_mode_fixed(c, 3529, 340, -1384);
 }
 
-CmdRet cam_bbh_room_8(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_room_8(struct Camera *c) {
     set_camera_mode_fixed(c, -500, 740, -1306);
 }
 
@@ -5875,7 +5936,7 @@ CmdRet cam_bbh_room_8(struct Camera *c) {
  * In BBH's room 5's library (the first floor room with the vanish cap/boo painting)
  * set the camera mode to fixed and position to (-2172, 200, 675)
  */
-CmdRet cam_bbh_room_5_library(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_room_5_library(struct Camera *c) {
     set_camera_mode_fixed(c, -2172, 200, 675);
 }
 
@@ -5884,53 +5945,53 @@ CmdRet cam_bbh_room_5_library(struct Camera *c) {
  * set the camera mode to to the hidden room's position
  * if coming from the library.
  */
-CmdRet cam_bbh_room_5_library_to_hidden_transition(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_room_5_library_to_hidden_transition(struct Camera *c) {
     if (set_camera_mode_fixed(c, -2172, 200, 675) == 1) {
         transition_next_state(c, 20);
     }
 }
 
-CmdRet cam_bbh_room_5_hidden_to_library_transition(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_room_5_hidden_to_library_transition(struct Camera *c) {
     if (set_camera_mode_fixed(c, -1542, 320, -307) == 1) {
         transition_next_state(c, 20);
     }
 }
 
-CmdRet cam_bbh_room_5_hidden(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_room_5_hidden(struct Camera *c) {
     c->doorStatus = DOOR_LEAVING_SPECIAL;
     set_camera_mode_fixed(c, -1542, 320, -307);
 }
 
-CmdRet cam_bbh_room_3(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_room_3(struct Camera *c) {
     set_camera_mode_fixed(c, -1893, 320, 2327);
 }
 
-CmdRet cam_bbh_room_7_mr_i(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_room_7_mr_i(struct Camera *c) {
     set_camera_mode_fixed(c, 1371, 360, -1302);
 }
 
-CmdRet cam_bbh_room_7_mr_i_to_coffins_transition(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_room_7_mr_i_to_coffins_transition(struct Camera *c) {
     if (set_camera_mode_fixed(c, 1371, 360, -1302) == 1) {
         transition_next_state(c, 20);
     }
 }
 
-CmdRet cam_bbh_room_7_coffins_to_mr_i_transition(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_room_7_coffins_to_mr_i_transition(struct Camera *c) {
     if (set_camera_mode_fixed(c, 2115, 260, -772) == 1) {
         transition_next_state(c, 20);
     }
 }
 
-CmdRet cam_bbh_elevator_room_lower(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_elevator_room_lower(struct Camera *c) {
     c->doorStatus = DOOR_LEAVING_SPECIAL;
     set_camera_mode_close_cam(&c->mode);
 }
 
-CmdRet cam_bbh_room_0_back_entrance(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_room_0_back_entrance(struct Camera *c) {
     set_camera_mode_close_cam(&c->mode);
 }
 
-CmdRet cam_bbh_elevator(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_elevator(struct Camera *c) {
     if (c->mode == CAMERA_MODE_FIXED) {
         set_camera_mode_close_cam(&c->mode);
         c->pos[1] = -405.f;
@@ -5938,65 +5999,65 @@ CmdRet cam_bbh_elevator(struct Camera *c) {
     }
 }
 
-CmdRet cam_bbh_room_12_upper(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_room_12_upper(struct Camera *c) {
     c->doorStatus = DOOR_LEAVING_SPECIAL;
     set_camera_mode_fixed(c, -2932, 296, 4429);
 }
 
-CmdRet cam_bbh_enter_front_door(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_enter_front_door(struct Camera *c) {
     set_camera_mode_close_cam(&c->mode);
 }
 
-CmdRet cam_bbh_room_2_library(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_room_2_library(struct Camera *c) {
     set_camera_mode_fixed(c, 3493, 440, 617);
 }
 
-CmdRet cam_bbh_room_2_library_to_trapdoor_transition(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_room_2_library_to_trapdoor_transition(struct Camera *c) {
     if (set_camera_mode_fixed(c, 3493, 440, 617) == 1) {
         transition_next_state(c, 20);
     }
 }
 
-CmdRet cam_bbh_room_2_trapdoor(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_room_2_trapdoor(struct Camera *c) {
     set_camera_mode_fixed(c, 3502, 440, 1217);
 }
 
-CmdRet cam_bbh_room_2_trapdoor_transition(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_room_2_trapdoor_transition(struct Camera *c) {
     if (set_camera_mode_fixed(c, 3502, 440, 1217) == 1) {
         transition_next_state(c, 20);
     }
 }
 
-CmdRet cam_bbh_room_9_attic(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_room_9_attic(struct Camera *c) {
     set_camera_mode_fixed(c, -670, 460, 372);
 }
 
-CmdRet cam_bbh_room_9_attic_transition(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_room_9_attic_transition(struct Camera *c) {
     if (set_camera_mode_fixed(c, -670, 460, 372) == 1) {
         transition_next_state(c, 20);
     }
 }
 
-CmdRet cam_bbh_room_9_mr_i_transition(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_room_9_mr_i_transition(struct Camera *c) {
     if (set_camera_mode_fixed(c, 131, 380, -263) == 1) {
         transition_next_state(c, 20);
     }
 }
 
-CmdRet cam_bbh_room_13_balcony(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_room_13_balcony(struct Camera *c) {
     set_camera_mode_fixed(c, 210, 420, 3109);
 }
 
-CmdRet cam_bbh_room_0(struct Camera *c) {
+BAD_RETURN(s32) cam_bbh_room_0(struct Camera *c) {
     c->doorStatus = DOOR_LEAVING_SPECIAL;
     set_camera_mode_fixed(c, -204, 807, 204);
 }
 
-CmdRet cam_ccm_enter_slide_shortcut(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cam_ccm_enter_slide_shortcut(UNUSED struct Camera *c) {
     sStatusFlags |= CAM_FLAG_CCM_SLIDE_SHORTCUT;
 }
 
-CmdRet cam_ccm_leave_slide_shortcut(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cam_ccm_leave_slide_shortcut(UNUSED struct Camera *c) {
     sStatusFlags &= ~CAM_FLAG_CCM_SLIDE_SHORTCUT;
 }
 
@@ -6026,7 +6087,7 @@ u32 surface_type_modes(struct Camera *c) {
 }
 
 /**
- * Set the camera mode to `mode` if mario is not standing on a special surface
+ * Set the camera mode to `mode` if Mario is not standing on a special surface
  */
 u32 set_mode_if_not_set_by_surface(struct Camera *c, u8 mode) {
     u32 modeChanged = 0;
@@ -6040,7 +6101,7 @@ u32 set_mode_if_not_set_by_surface(struct Camera *c, u8 mode) {
 }
 
 /**
- * Used in THI, check if mario is standing on any of the special surfaces in that area
+ * Used in THI, check if Mario is standing on any of the special surfaces in that area
  */
 void surface_type_modes_thi(struct Camera *c) {
     switch (sMarioGeometry.currFloorType) {
@@ -6149,7 +6210,7 @@ struct CameraTrigger sCamRR[] = {
  * mode (which is called "tower mode" in the patent), it's speculated they belonged to BoB.
  *
  * This table contains the only instance of a CameraTrigger with an area set to -1, and it sets the mode
- * to free_roam when mario is not walking up the tower.
+ * to free_roam when Mario is not walking up the tower.
  */
 struct CameraTrigger sCamBOB[] = {
     {  1, cam_bob_tower, 2468, 2720, -4608, 3263, 1696, 3072, 0 },
@@ -6158,7 +6219,7 @@ struct CameraTrigger sCamBOB[] = {
 };
 
 /**
- * The CotMC trigger is only used to prevent fix lakitu in place when mario exits through the waterfall.
+ * The CotMC trigger is only used to prevent fix Lakitu in place when Mario exits through the waterfall.
  */
 struct CameraTrigger sCamCotMC[] = {
     { 1, cam_cotmc_exit_waterfall, 0, 1500, 3500, 550, 10000, 1500, 0 },
@@ -6178,8 +6239,8 @@ struct CameraTrigger sCamCCM[] = {
  * The Castle triggers are used to set the camera to fixed mode when entering the lobby, and to set it
  * to close mode when leaving it. They also set the mode to spiral staircase.
  *
- * There are two triggers for looking up and down straight staircases when mario is at the start,
- * and one trigger that starts the enter pool cutscene when mario enters HMC.
+ * There are two triggers for looking up and down straight staircases when Mario is at the start,
+ * and one trigger that starts the enter pool cutscene when Mario enters HMC.
  */
 struct CameraTrigger sCamCastle[] = {
     { 1, cam_castle_close_mode, -1100, 657, -1346, 300, 150, 300, 0 },
@@ -6339,7 +6400,7 @@ struct CutsceneSplinePoint sIntroStartToPipeFocus[] = {
 
 /**
  * Describes the spline the camera follows, starting when the camera jumps to Lakitu and ending after
- * mario jumps out of the pipe when the first dialog opens.  This table specifically updates the
+ * Mario jumps out of the pipe when the first dialog opens.  This table specifically updates the
  * camera's position.
  */
 struct CutsceneSplinePoint sIntroPipeToDialogPosition[] = {
@@ -6353,6 +6414,15 @@ struct CutsceneSplinePoint sIntroPipeToDialogPosition[] = {
 /**
  * Describes the spline that the camera's focus follows, during the same part of the intro as the above.
  */
+#ifdef VERSION_EU
+struct CutsceneSplinePoint sIntroPipeToDialogFocus[] = {
+    { 0, 25, { -1248, 450, 4596 } }, { 1, 71, { -1258, 485, 4606 } }, { 2, 71, { -1379, 344, 4769 } },
+    { 3, 22, { -1335, 366, 4815 } }, { 4, 23, { -1315, 370, 4450 } }, { 5, 40, { -1322, 333, 4591 } },
+    { 6, 25, { -1185, 329, 4616 } }, { 7, 21, { -1059, 380, 4487 } }, { 8, 14, { -1086, 421, 4206 } },
+    { 9, 21, { -1321, 346, 4098 } }, { 0, 0, { -1328, 385, 4354 } },  { 0, 0, { -1328, 385, 4354 } },
+    { 0, 0, { -1328, 385, 4354 } },  { -1, 0, { -1328, 385, 4354 } }
+};
+#else
 struct CutsceneSplinePoint sIntroPipeToDialogFocus[] = {
     { 0, 20, { -1248, 450, 4596 } }, { 1, 59, { -1258, 485, 4606 } }, { 2, 59, { -1379, 344, 4769 } },
     { 3, 20, { -1335, 366, 4815 } }, { 4, 23, { -1315, 370, 4450 } }, { 5, 40, { -1322, 333, 4591 } },
@@ -6360,6 +6430,7 @@ struct CutsceneSplinePoint sIntroPipeToDialogFocus[] = {
     { 9, 21, { -1321, 346, 4098 } }, { 0, 0, { -1328, 385, 4354 } },  { 0, 0, { -1328, 385, 4354 } },
     { 0, 0, { -1328, 385, 4354 } },  { -1, 0, { -1328, 385, 4354 } }
 };
+#endif
 
 struct CutsceneSplinePoint sEndingFlyToWindowPos[] = {
     { 0, 0, { -86, 876, 640 } },   { 1, 0, { -86, 876, 610 } },   { 2, 0, { -66, 945, 393 } },
@@ -6404,15 +6475,19 @@ struct CutsceneSplinePoint sEndingLookUpAtCastle[] = {
 };
 
 struct CutsceneSplinePoint sEndingLookAtSkyFocus[] = {
+#ifdef VERSION_EU
+    { 0, 50, { 484, 1368, -868 } }, { 0, 72, { 479, 1372, -872 } }, { 0, 50, { 351, 1817, -918 } },
+#else
     { 0, 50, { 484, 1368, -888 } }, { 0, 72, { 479, 1372, -892 } }, { 0, 50, { 351, 1817, -918 } },
+#endif
     { 0, 50, { 351, 1922, -598 } }, { 0, 0, { 636, 2027, -415 } },  { 0, 0, { 636, 2027, -415 } },
     { -1, 0, { 636, 2027, -415 } }
 };
 
 /**
- * Activates any CameraTriggers that mario is inside.
+ * Activates any CameraTriggers that Mario is inside.
  * Then, applies area-specific processing to the camera, such as setting the default mode, or changing
- * the mode based on the terrain type mario is standing on.
+ * the mode based on the terrain type Mario is standing on.
  *
  * @return the camera's mode after processing, although this is unused in the code
  */
@@ -6453,7 +6528,7 @@ s16 camera_course_processing(struct Camera *c) {
                                   sCameraTriggers[level][b].boundsY,
                                   sCameraTriggers[level][b].boundsZ);
 
-                // Check if mario is inside the bounds
+                // Check if Mario is inside the bounds
                 if (is_pos_in_bounds(sMarioCamState->pos, center, bounds,
                                                    sCameraTriggers[level][b].boundsYaw) == TRUE) {
                     //! This should be checked before calling is_pos_in_bounds. (It doesn't belong
@@ -6466,7 +6541,7 @@ s16 camera_course_processing(struct Camera *c) {
             }
 
             if ((sCameraTriggers[level])[b].area == -1) {
-                // Default triggers are only active if mario is not already inside another trigger
+                // Default triggers are only active if Mario is not already inside another trigger
                 if (!insideBounds) {
                     if (!(sStatusFlags & CAM_FLAG_BLOCK_AREA_PROCESSING)) {
                         sCameraTriggers[level][b].event(c);
@@ -6641,15 +6716,15 @@ void resolve_geometry_collisions(Vec3f pos, UNUSED Vec3f lastGood) {
 }
 
 /**
- * Checks for any walls obstructing mario from view, and calculates a new yaw that the camera should
+ * Checks for any walls obstructing Mario from view, and calculates a new yaw that the camera should
  * rotate towards.
  *
- * @param[out] avoidYaw the angle (from mario) that the camera should rotate towards to avoid the wall.
- *                      The camera then approaches avoidYaw until mario is no longer obstructed.
+ * @param[out] avoidYaw the angle (from Mario) that the camera should rotate towards to avoid the wall.
+ *                      The camera then approaches avoidYaw until Mario is no longer obstructed.
  *                      avoidYaw is always parallel to the wall.
- * @param yawRange      how wide of an arc to check for walls obscuring mario.
+ * @param yawRange      how wide of an arc to check for walls obscuring Mario.
  *
- * @return 3 if a wall is covering mario, 1 if a wall is only near the camera.
+ * @return 3 if a wall is covering Mario, 1 if a wall is only near the camera.
  */
 s32 rotate_camera_around_walls(struct Camera *c, Vec3f cPos, s16 *avoidYaw, s16 yawRange) {
     UNUSED f32 unused1;
@@ -6663,18 +6738,18 @@ s32 rotate_camera_around_walls(struct Camera *c, Vec3f cPos, s16 *avoidYaw, s16 
     s16 wallYaw, horWallNorm;
     UNUSED s16 unused4;
     s16 dummyPitch;
-    // The yaw of the vector from mario to the camera.
+    // The yaw of the vector from Mario to the camera.
     s16 yawFromMario;
     UNUSED s16 unused5;
     s32 status = 0;
-    /// The current iteration. The algorithm takes 8 equal steps from mario back to the camera.
+    /// The current iteration. The algorithm takes 8 equal steps from Mario back to the camera.
     s32 step = 0;
     UNUSED s32 unused6;
 
     vec3f_get_dist_and_angle(sMarioCamState->pos, cPos, &dummyDist, &dummyPitch, &yawFromMario);
     sStatusFlags &= ~CAM_FLAG_CAM_NEAR_WALL;
     colData.offsetY = 100.0f;
-    // The distance from mario to lakitu
+    // The distance from Mario to Lakitu
     checkDist = 0.0f;
     /// The radius used to find potential walls to avoid.
     /// @bug Increases to 250.f, but the max collision radius is 200.f
@@ -6683,7 +6758,7 @@ s32 rotate_camera_around_walls(struct Camera *c, Vec3f cPos, s16 *avoidYaw, s16 
     fineRadius = 100.0f;
 
     for (step = 0; step < 8; step++) {
-        // Start at mario, move backwards to lakitu's position
+        // Start at Mario, move backwards to Lakitu's position
         colData.x = sMarioCamState->pos[0] + ((cPos[0] - sMarioCamState->pos[0]) * checkDist);
         colData.y = sMarioCamState->pos[1] + ((cPos[1] - sMarioCamState->pos[1]) * checkDist);
         colData.z = sMarioCamState->pos[2] + ((cPos[2] - sMarioCamState->pos[2]) * checkDist);
@@ -6694,8 +6769,8 @@ s32 rotate_camera_around_walls(struct Camera *c, Vec3f cPos, s16 *avoidYaw, s16 
         if (find_wall_collisions(&colData) != 0) {
             wall = colData.walls[colData.numWalls - 1];
 
-            // If we're over halfway from mario to lakitu, then there's a wall near the camera, but
-            // not necessarily obstructing mario
+            // If we're over halfway from Mario to Lakitu, then there's a wall near the camera, but
+            // not necessarily obstructing Mario
             if (step >= 5) {
                 sStatusFlags |= CAM_FLAG_CAM_NEAR_WALL;
                 if (status <= 0) {
@@ -6720,10 +6795,10 @@ s32 rotate_camera_around_walls(struct Camera *c, Vec3f cPos, s16 *avoidYaw, s16 
                 wall = colData.walls[colData.numWalls - 1];
                 horWallNorm = atan2s(wall->normal.z, wall->normal.x);
                 wallYaw = horWallNorm + DEGREES(90);
-                // If mario would be blocked by the surface, then avoid it
+                // If Mario would be blocked by the surface, then avoid it
                 if ((is_range_behind_surface(sMarioCamState->pos, cPos, wall, yawRange, SURFACE_WALL_MISC) == 0)
                     && (is_mario_behind_surface(c, wall) == TRUE)
-                    // Also check if the wall is tall enough to cover mario
+                    // Also check if the wall is tall enough to cover Mario
                     && (is_surf_within_bounding_box(wall, -1.f, 150.f, -1.f) == FALSE)) {
                     // Calculate the avoid direction. The function returns the opposite direction so add 180
                     // degrees.
@@ -6741,7 +6816,7 @@ s32 rotate_camera_around_walls(struct Camera *c, Vec3f cPos, s16 *avoidYaw, s16 
 }
 
 /**
- * Stores type and height of the nearest floor and ceiling to mario in `pg`
+ * Stores type and height of the nearest floor and ceiling to Mario in `pg`
  *
  * Note: Also finds the water level, but waterHeight is unused
  */
@@ -6802,7 +6877,7 @@ s32 unused_dialog_cutscene_response(u8 cutscene) {
         sObjectCutscene = cutscene;
     }
 
-    // if playing this cutscene and mario responded, return the response
+    // if playing this cutscene and Mario responded, return the response
     if ((gCamera->cutscene == cutscene) && (sCutsceneDialogResponse != 0)) {
         return (s16) sCutsceneDialogResponse;
     } else {
@@ -6890,7 +6965,6 @@ void copy_spline_segment(struct CutsceneSplinePoint dst[], struct CutsceneSpline
 
     init_spline_point(&dst[i], src[j].index, src[j].speed, src[j].point);
     i += 1;
-
     do {
         do {
             init_spline_point(&dst[i], src[j].index, src[j].speed, src[j].point);
@@ -6900,18 +6974,18 @@ void copy_spline_segment(struct CutsceneSplinePoint dst[], struct CutsceneSpline
     } while (j > 16);
 
     // Create the end of the spline by duplicating the last point
-    init_spline_point(&dst[i], 0, src[j].speed, src[j].point);
-    init_spline_point(&dst[i + 1], 0, 0, src[j].point);
-    init_spline_point(&dst[i + 2], 0, 0, src[j].point);
-    init_spline_point(&dst[i + 3], -1, 0, src[j].point);
+    do { init_spline_point(&dst[i], 0, src[j].speed, src[j].point); } while (0);
+    do { init_spline_point(&dst[i + 1], 0, 0, src[j].point); } while (0);
+    do { init_spline_point(&dst[i + 2], 0, 0, src[j].point); } while (0);
+    do { init_spline_point(&dst[i + 3], -1, 0, src[j].point); } while (0);
 }
 
 /**
- * Triggers mario to enter a dialog state. This is used to make mario look at the focus of a cutscene,
+ * Triggers Mario to enter a dialog state. This is used to make Mario look at the focus of a cutscene,
  * for example, bowser.
  * @param state 0 = stop, 1 = start, 2 = start and look up, and 3 = start and look down
  *
- * @return if mario left the dialog state, return CUTSCENE_LOOP, else return gCutsceneTimer
+ * @return if Mario left the dialog state, return CUTSCENE_LOOP, else return gCutsceneTimer
  */
 s16 cutscene_common_set_dialog_state(s32 state) {
     s16 timer = gCutsceneTimer;
@@ -6928,9 +7002,9 @@ static UNUSED void unused_cutscene_mario_dialog_looking_down(UNUSED struct Camer
 }
 
 /**
- * Cause mario to enter the normal dialog state.
+ * Cause Mario to enter the normal dialog state.
  */
-static CmdRet cutscene_mario_dialog(UNUSED struct Camera *c) {
+static BAD_RETURN(s32) cutscene_mario_dialog(UNUSED struct Camera *c) {
     gCutsceneTimer = cutscene_common_set_dialog_state(1);
 }
 
@@ -6942,9 +7016,9 @@ static UNUSED void unused_cutscene_mario_dialog_looking_up(UNUSED struct Camera 
 /**
  * Lower the volume (US only) and start the peach letter background music
  */
-CmdRet cutscene_intro_peach_start_letter_music(UNUSED struct Camera *c) {
-#ifdef VERSION_US
-    func_8031FFB4(0, 60, 40);
+BAD_RETURN(s32) cutscene_intro_peach_start_letter_music(UNUSED struct Camera *c) {
+#if defined(VERSION_US) || defined(VERSION_SH)
+    func_8031FFB4(SEQ_PLAYER_LEVEL, 60, 40);
 #endif
     cutscene_intro_peach_play_message_music();
 }
@@ -6952,9 +7026,9 @@ CmdRet cutscene_intro_peach_start_letter_music(UNUSED struct Camera *c) {
 /**
  * Raise the volume (not in JP) and start the flying music.
  */
-CmdRet cutscene_intro_peach_start_flying_music(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_intro_peach_start_flying_music(UNUSED struct Camera *c) {
 #ifndef VERSION_JP
-    sequence_player_unlower(0, 60);
+    sequence_player_unlower(SEQ_PLAYER_LEVEL, 60);
 #endif
     cutscene_intro_peach_play_lakitu_flying_music();
 }
@@ -6964,8 +7038,8 @@ CmdRet cutscene_intro_peach_start_flying_music(UNUSED struct Camera *c) {
  * Lower the volume for the letter background music. In US, this happens on the same frame as the music
  * starts.
  */
-CmdRet cutscene_intro_peach_eu_lower_volume(UNUSED struct Camera *c) {
-    func_8031FFB4(0, 60, 40);
+BAD_RETURN(s32) cutscene_intro_peach_eu_lower_volume(UNUSED struct Camera *c) {
+    func_8031FFB4(SEQ_PLAYER_LEVEL, 60, 40);
 }
 #endif
 
@@ -6985,8 +7059,7 @@ void player2_rotate_cam(struct Camera *c, s16 minPitch, s16 maxPitch, s16 minYaw
     approach_s16_asymptotic_bool(&sCreditsPlayer2Pitch, -(s16)(gPlayer2Controller->stickY * 265.f), 4);
     vec3f_get_dist_and_angle(c->pos, c->focus, &distCamToFocus, &pitch, &yaw);
 
-    pitchCap = 0x3800 - pitch;
-    if (pitchCap < 0) {
+    pitchCap = 0x3800 - pitch; if (pitchCap < 0) {
         pitchCap = 0;
     }
     if (maxPitch > pitchCap) {
@@ -7081,15 +7154,13 @@ void pan_camera(struct Camera *c, s16 incPitch, s16 incYaw) {
     UNUSED Vec3f unused1;
     f32 distCamToFocus;
     s16 pitch, yaw;
-    UNUSED f32 unused2;
 
     vec3f_get_dist_and_angle(c->pos, c->focus, &distCamToFocus, &pitch, &yaw);
-    pitch += incPitch;
-    yaw += incYaw;
+    pitch += incPitch;     yaw += incYaw;
     vec3f_set_dist_and_angle(c->pos, c->focus, distCamToFocus, pitch, yaw);
 }
 
-CmdRet cutscene_shake_explosion(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_shake_explosion(UNUSED struct Camera *c) {
     set_environmental_camera_shake(SHAKE_ENV_EXPLOSION);
     cutscene_set_fov_shake_preset(1);
 }
@@ -7121,34 +7192,34 @@ void set_flag_post_door(struct Camera *c) {
 }
 
 void cutscene_soften_music(UNUSED struct Camera *c) {
-    func_8031FFB4(0, 60, 40);
+    func_8031FFB4(SEQ_PLAYER_LEVEL, 60, 40);
 }
 
 void cutscene_unsoften_music(UNUSED struct Camera *c) {
-    sequence_player_unlower(0, 60);
+    sequence_player_unlower(SEQ_PLAYER_LEVEL, 60);
 }
 
-void unused_802905C8(UNUSED struct Camera *c) {
+static void stub_camera_5(UNUSED struct Camera *c) {
 }
 
-CmdRet cutscene_unused_start(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_unused_start(UNUSED struct Camera *c) {
 }
 
-CmdRet cutscene_unused_loop(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_unused_loop(UNUSED struct Camera *c) {
 }
 
 /**
- * Set the camera position and focus for when mario falls from the sky.
+ * Set the camera position and focus for when Mario falls from the sky.
  */
-CmdRet cutscene_ending_mario_fall_start(struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_mario_fall_start(struct Camera *c) {
     vec3f_set(c->focus, -26.f, 0.f, -137.f);
     vec3f_set(c->pos, 165.f, 4725.f, 324.f);
 }
 
 /**
- * Focus on mario when he's falling from the sky.
+ * Focus on Mario when he's falling from the sky.
  */
-CmdRet cutscene_ending_mario_fall_focus_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_mario_fall_focus_mario(struct Camera *c) {
     Vec3f offset;
     vec3f_set(offset, 0.f, 80.f, 0.f);
 
@@ -7163,16 +7234,16 @@ CmdRet cutscene_ending_mario_fall_focus_mario(struct Camera *c) {
 /**
  * Mario falls from the sky after the grand star cutscene.
  */
-CmdRet cutscene_ending_mario_fall(struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_mario_fall(struct Camera *c) {
     cutscene_event(cutscene_ending_mario_fall_start, c, 0, 0);
     cutscene_event(cutscene_ending_mario_fall_focus_mario, c, 0, -1);
     player2_rotate_cam(c, -0x2000, 0x2000, -0x2000, 0x2000);
 }
 
 /**
- * Closeup of mario as the wing cap fades and mario looks up.
+ * Closeup of Mario as the wing cap fades and Mario looks up.
  */
-CmdRet cutscene_ending_mario_land_closeup(struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_mario_land_closeup(struct Camera *c) {
     vec3f_set(c->focus, 85.f, 826.f, 250.f);
     vec3f_set(c->pos, -51.f, 988.f, -202.f);
     player2_rotate_cam(c, -0x2000, 0x2000, -0x2000, 0x2000);
@@ -7181,7 +7252,7 @@ CmdRet cutscene_ending_mario_land_closeup(struct Camera *c) {
 /**
  * Reset the spline progress and cvar9.
  */
-CmdRet cutscene_ending_reset_spline(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_reset_spline(UNUSED struct Camera *c) {
     sCutsceneVars[9].point[0] = 0.f;
     cutscene_reset_spline();
 }
@@ -7189,7 +7260,7 @@ CmdRet cutscene_ending_reset_spline(UNUSED struct Camera *c) {
 /**
  * Follow sEndingFlyToWindowPos/Focus up to the window.
  */
-CmdRet cutscene_ending_fly_up_to_window(struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_fly_up_to_window(struct Camera *c) {
     move_point_along_spline(c->pos, sEndingFlyToWindowPos, &sCutsceneSplineSegment, &sCutsceneSplineSegmentProgress);
     move_point_along_spline(c->focus, sEndingFlyToWindowFocus, &sCutsceneSplineSegment, &sCutsceneSplineSegmentProgress);
 }
@@ -7197,16 +7268,16 @@ CmdRet cutscene_ending_fly_up_to_window(struct Camera *c) {
 /**
  * Move the camera up to the window as the star power frees peach.
  */
-CmdRet cutscene_ending_stars_free_peach(struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_stars_free_peach(struct Camera *c) {
     cutscene_event(cutscene_ending_reset_spline, c, 0, 0);
     cutscene_event(cutscene_ending_fly_up_to_window, c, 0, -1);
     player2_rotate_cam(c, -0x2000, 0x2000, -0x2000, 0x2000);
 }
 
 /**
- * Move the camera to the ground as mario lands.
+ * Move the camera to the ground as Mario lands.
  */
-CmdRet cutscene_ending_mario_land(struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_mario_land(struct Camera *c) {
     vec3f_set(c->focus, sEndingFlyToWindowFocus[0].point[0], sEndingFlyToWindowFocus[0].point[1] + 80.f, sEndingFlyToWindowFocus[0].point[2]);
     vec3f_set(c->pos, sEndingFlyToWindowPos[0].point[0], sEndingFlyToWindowPos[0].point[1], sEndingFlyToWindowPos[0].point[2] + 150.f);
     player2_rotate_cam(c, -0x800, 0x2000, -0x2000, 0x2000);
@@ -7215,7 +7286,7 @@ CmdRet cutscene_ending_mario_land(struct Camera *c) {
 /**
  * Move the camera closer to peach appearing.
  */
-CmdRet cutscene_ending_peach_appear_closeup(struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_peach_appear_closeup(struct Camera *c) {
     vec3f_set(c->pos, 179.f, 2463.f, -1216.f);
     c->pos[1] = gCutsceneFocus->oPosY + 35.f;
     vec3f_set(c->focus, gCutsceneFocus->oPosX, gCutsceneFocus->oPosY + 125.f, gCutsceneFocus->oPosZ);
@@ -7224,7 +7295,7 @@ CmdRet cutscene_ending_peach_appear_closeup(struct Camera *c) {
 /**
  * Peach fades in, the camera focuses on her.
  */
-CmdRet cutscene_ending_peach_appears(struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_peach_appears(struct Camera *c) {
     cutscene_event(cutscene_ending_peach_appear_closeup, c, 0, 0);
     approach_f32_asymptotic_bool(&c->pos[1], gCutsceneFocus->oPosY + 35.f, 0.02f);
     approach_f32_asymptotic_bool(&c->focus[1], gCutsceneFocus->oPosY + 125.f, 0.15f);
@@ -7234,7 +7305,7 @@ CmdRet cutscene_ending_peach_appears(struct Camera *c) {
 /**
  * Reset spline progress, set cvar2 y offset.
  */
-CmdRet cutscene_ending_peach_descends_start(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_peach_descends_start(UNUSED struct Camera *c) {
     cutscene_reset_spline();
     sCutsceneVars[2].point[1] = 150.f;
 }
@@ -7242,22 +7313,22 @@ CmdRet cutscene_ending_peach_descends_start(UNUSED struct Camera *c) {
 /**
  * Follow the sEndingPeachDescentCamPos spline, which rotates around peach.
  */
-CmdRet cutscene_ending_follow_peach_descent(struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_follow_peach_descent(struct Camera *c) {
     move_point_along_spline(c->pos, sEndingPeachDescentCamPos, &sCutsceneSplineSegment, &sCutsceneSplineSegmentProgress);
     c->pos[1] += gCutsceneFocus->oPosY + sCutsceneVars[3].point[1];
 }
 
 /**
- * Decrease cvar2's y offset while the camera flies backwards to mario.
+ * Decrease cvar2's y offset while the camera flies backwards to Mario.
  */
-CmdRet cutscene_ending_peach_descent_lower_focus(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_peach_descent_lower_focus(UNUSED struct Camera *c) {
     camera_approach_f32_symmetric_bool(&(sCutsceneVars[2].point[1]), 90.f, 0.5f);
 }
 
 /**
- * Keep following the sEndingPeachDescentCamPos spline, which leads back to mario.
+ * Keep following the sEndingPeachDescentCamPos spline, which leads back to Mario.
  */
-CmdRet cutscene_ending_peach_descent_back_to_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_peach_descent_back_to_mario(struct Camera *c) {
     Vec3f pos;
 
     move_point_along_spline(pos, sEndingPeachDescentCamPos, &sCutsceneSplineSegment, &sCutsceneSplineSegmentProgress);
@@ -7267,10 +7338,10 @@ CmdRet cutscene_ending_peach_descent_back_to_mario(struct Camera *c) {
 }
 
 /**
- * Peach starts floating to the ground. Rotate the camera around her, then fly backwards to mario when
+ * Peach starts floating to the ground. Rotate the camera around her, then fly backwards to Mario when
  * she lands.
  */
-CmdRet cutscene_ending_peach_descends(struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_peach_descends(struct Camera *c) {
     cutscene_event(cutscene_ending_peach_descends_start, c, 0, 0);
     cutscene_event(cutscene_ending_follow_peach_descent, c, 0, 299);
     cutscene_event(cutscene_ending_peach_descent_back_to_mario, c, 300, -1);
@@ -7282,9 +7353,9 @@ CmdRet cutscene_ending_peach_descends(struct Camera *c) {
 
 /**
  * Mario runs across the bridge to peach, and takes off his hat.
- * Follow the sEndingMarioToPeach* splines while mario runs across.
+ * Follow the sEndingMarioToPeach* splines while Mario runs across.
  */
-CmdRet cutscene_ending_mario_to_peach(struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_mario_to_peach(struct Camera *c) {
     cutscene_event(cutscene_ending_reset_spline, c, 0, 0);
     move_point_along_spline(c->pos, sEndingMarioToPeachPos, &sCutsceneSplineSegment, &sCutsceneSplineSegmentProgress);
     move_point_along_spline(c->focus, sEndingMarioToPeachFocus, &sCutsceneSplineSegment, &sCutsceneSplineSegmentProgress);
@@ -7294,45 +7365,51 @@ CmdRet cutscene_ending_mario_to_peach(struct Camera *c) {
 /**
  * Make the focus follow the sEndingLookUpAtCastle spline.
  */
-CmdRet cutscene_ending_look_up_at_castle(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_look_up_at_castle(UNUSED struct Camera *c) {
     move_point_along_spline(c->focus, sEndingLookUpAtCastle, &sCutsceneSplineSegment, &sCutsceneSplineSegmentProgress);
 }
 
 /**
  * Peach opens her eyes and the camera looks at the castle window again.
  */
-CmdRet cutscene_ending_peach_wakeup(struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_peach_wakeup(struct Camera *c) {
     cutscene_event(cutscene_ending_reset_spline, c, 0, 0);
     cutscene_event(cutscene_ending_look_up_at_castle, c, 0, 0);
+#ifdef VERSION_EU
+    cutscene_event(cutscene_ending_look_up_at_castle, c, 265, -1);
+    cutscene_spawn_obj(7, 315);
+    cutscene_spawn_obj(9, 355);
+#else
     cutscene_event(cutscene_ending_look_up_at_castle, c, 250, -1);
     cutscene_spawn_obj(7, 300);
     cutscene_spawn_obj(9, 340);
+#endif
     vec3f_set(c->pos, -163.f, 978.f, -1082.f);
     player2_rotate_cam(c, -0x800, 0x2000, -0x2000, 0x2000);
 }
 
 /**
- * Side view of peach and mario. Peach thanks mario for saving her.
+ * Side view of peach and Mario. Peach thanks Mario for saving her.
  */
-CmdRet cutscene_ending_dialog(struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_dialog(struct Camera *c) {
     vec3f_set(c->focus, 11.f, 983.f, -1273.f);
     vec3f_set(c->pos, -473.f, 970.f, -1152.f);
     player2_rotate_cam(c, -0x800, 0x2000, -0x2000, 0x2000);
 }
 
 /**
- * Zoom in and move the camera close to mario and peach.
+ * Zoom in and move the camera close to Mario and peach.
  */
-CmdRet cutscene_ending_kiss_closeup(struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_kiss_closeup(struct Camera *c) {
     set_fov_function(CAM_FOV_SET_29);
     vec3f_set(c->focus, 350.f, 1034.f, -1216.f);
     vec3f_set(c->pos, -149.f, 1021.f, -1216.f);
 }
 
 /**
- * Fly back and zoom out for mario's spin after the kiss.
+ * Fly back and zoom out for Mario's spin after the kiss.
  */
-CmdRet cutscene_ending_kiss_here_we_go(struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_kiss_here_we_go(struct Camera *c) {
     Vec3f pos, foc;
 
     set_fov_function(CAM_FOV_DEFAULT);
@@ -7344,18 +7421,22 @@ CmdRet cutscene_ending_kiss_here_we_go(struct Camera *c) {
 }
 
 /**
- * Peach kisses mario on the nose.
+ * Peach kisses Mario on the nose.
  */
-CmdRet cutscene_ending_kiss(struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_kiss(struct Camera *c) {
     cutscene_event(cutscene_ending_kiss_closeup, c, 0, 0);
+#ifdef VERSION_EU
+    cutscene_event(cutscene_ending_kiss_here_we_go, c, 185, -1);
+#else
     cutscene_event(cutscene_ending_kiss_here_we_go, c, 155, -1);
+#endif
     player2_rotate_cam(c, -0x800, 0x2000, -0x2000, 0x2000);
 }
 
 /**
  * Make the focus follow sEndingLookAtSkyFocus.
  */
-CmdRet cutscene_ending_look_at_sky(struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_look_at_sky(struct Camera *c) {
     move_point_along_spline(c->focus, sEndingLookAtSkyFocus, &sCutsceneSplineSegment, &sCutsceneSplineSegmentProgress);
     vec3f_set(c->pos, 699.f, 1680.f, -703.f);
 }
@@ -7364,14 +7445,14 @@ CmdRet cutscene_ending_look_at_sky(struct Camera *c) {
  * Zoom in the fov. The fovFunc was just set to default, so it wants to approach 45. But while this is
  * called, it will stay at about 37.26f
  */
-CmdRet cutscene_ending_zoom_fov(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_zoom_fov(UNUSED struct Camera *c) {
     sFOVState.fov = 37.f;
 }
 
 /**
- * Peach suggests baking a cake for mario. Mario looks back at the camera before going inside the castle.
+ * Peach suggests baking a cake for Mario. Mario looks back at the camera before going inside the castle.
  */
-CmdRet cutscene_ending_cake_for_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_cake_for_mario(struct Camera *c) {
     cutscene_event(cutscene_ending_reset_spline, c, 0, 0);
     cutscene_event(cutscene_ending_look_at_sky, c, 0, 0);
     cutscene_event(cutscene_ending_zoom_fov, c, 0, 499);
@@ -7385,7 +7466,7 @@ CmdRet cutscene_ending_cake_for_mario(struct Camera *c) {
 /**
  * Stop the ending cutscene, reset the fov.
  */
-CmdRet cutscene_ending_stop(struct Camera *c) {
+BAD_RETURN(s32) cutscene_ending_stop(struct Camera *c) {
     set_fov_function(CAM_FOV_SET_45);
     c->cutscene = 0;
     gCutsceneTimer = CUTSCENE_STOP;
@@ -7393,19 +7474,19 @@ CmdRet cutscene_ending_stop(struct Camera *c) {
 
 /**
  * Start the grand star cutscene.
- * cvar0 is a relative offset from mario.
+ * cvar0 is a relative offset from Mario.
  * cvar1 is the is the camera's goal position.
  */
-CmdRet cutscene_grand_star_start(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_grand_star_start(UNUSED struct Camera *c) {
     vec3f_set(sCutsceneVars[0].point, 0.f, 150.f, -600.f);
     offset_rotated(sCutsceneVars[1].point, sMarioCamState->pos, sCutsceneVars[0].point, sMarioCamState->faceAngle);
     sCutsceneVars[1].point[1] = 457.f;
 }
 
 /**
- * Make the camera fly to the front of mario.
+ * Make the camera fly to the front of Mario.
  */
-CmdRet cutscene_grand_star_front_of_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_grand_star_front_of_mario(struct Camera *c) {
     f32 goalDist;
     s16 goalPitch, goalYaw;
     f32 dist;
@@ -7420,9 +7501,9 @@ CmdRet cutscene_grand_star_front_of_mario(struct Camera *c) {
 }
 
 /**
- * Started shortly after mario starts the triple jump. Stores mario's face angle and zeros cvar2.
+ * Started shortly after Mario starts the triple jump. Stores Mario's face angle and zeros cvar2.
  */
-CmdRet cutscene_grand_star_mario_jump(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_grand_star_mario_jump(UNUSED struct Camera *c) {
     vec3s_set(sCutsceneVars[0].angle, 0, sMarioCamState->faceAngle[1], 0);
     vec3f_set(sCutsceneVars[2].point, 0.f, 0.f, 0.f);
 }
@@ -7430,15 +7511,15 @@ CmdRet cutscene_grand_star_mario_jump(UNUSED struct Camera *c) {
 /**
  * Accelerate cvar2 to point back and to the left (relative to the camera).
  */
-CmdRet cutscene_grand_star_accel_cvar2(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_grand_star_accel_cvar2(UNUSED struct Camera *c) {
     camera_approach_f32_symmetric_bool(&sCutsceneVars[2].point[2], -40.f, 2.0f);
     sCutsceneVars[2].point[0] = 5.0f;
 }
 
 /**
- * Decrease cvar2 offset, follow mario by directly updating the camera's pos.
+ * Decrease cvar2 offset, follow Mario by directly updating the camera's pos.
  */
-CmdRet cutscene_grand_star_approach_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_grand_star_approach_mario(struct Camera *c) {
     camera_approach_f32_symmetric_bool(&sCutsceneVars[2].point[2], 0.f, 2.f);
     sCutsceneVars[2].point[0] = 0.f;
     approach_f32_asymptotic_bool(&c->pos[0], sMarioCamState->pos[0], 0.01f);
@@ -7446,14 +7527,14 @@ CmdRet cutscene_grand_star_approach_mario(struct Camera *c) {
 }
 
 /**
- * Offset the camera's position by cvar2. Before mario triple jumps, this moves back and to the left.
+ * Offset the camera's position by cvar2. Before Mario triple jumps, this moves back and to the left.
  * After the triple jump, cvar2 decelerates to 0.
  */
-CmdRet cutscene_grand_star_move_cvar2(struct Camera *c) {
+BAD_RETURN(s32) cutscene_grand_star_move_cvar2(struct Camera *c) {
     offset_rotated(c->pos, c->pos, sCutsceneVars[2].point, sCutsceneVars[0].angle);
 }
 
-CmdRet cutscene_grand_star_focus_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_grand_star_focus_mario(struct Camera *c) {
     Vec3f foc;
 
     vec3f_set(foc, sMarioCamState->pos[0], (sMarioCamState->pos[1] - 307.f) * 0.5f + 407.f, sMarioCamState->pos[2]);
@@ -7461,9 +7542,9 @@ CmdRet cutscene_grand_star_focus_mario(struct Camera *c) {
 }
 
 /**
- * The first part of the grand star cutscene, after mario has collected the grand star.
+ * The first part of the grand star cutscene, after Mario has collected the grand star.
  */
-CmdRet cutscene_grand_star(struct Camera *c) {
+BAD_RETURN(s32) cutscene_grand_star(struct Camera *c) {
     sStatusFlags |= CAM_FLAG_SMOOTH_MOVEMENT;
     cutscene_event(cutscene_grand_star_start, c, 0, 0);
     cutscene_event(cutscene_grand_star_front_of_mario, c, 0, 109);
@@ -7475,9 +7556,9 @@ CmdRet cutscene_grand_star(struct Camera *c) {
 }
 
 /**
- * Zero the cvars that are used when mario is flying.
+ * Zero the cvars that are used when Mario is flying.
  */
-CmdRet cutscene_grand_star_fly_start(struct Camera *c) {
+BAD_RETURN(s32) cutscene_grand_star_fly_start(struct Camera *c) {
     //! cvar7 is unused in grand star
     vec3f_set(sCutsceneVars[7].point, 0.5f, 0.5f, 0.5f);
     //! cvar6 is unused in grand star
@@ -7489,9 +7570,9 @@ CmdRet cutscene_grand_star_fly_start(struct Camera *c) {
 }
 
 /**
- * Decrease the cvar offsets so that lakitu flies closer to mario.
+ * Decrease the cvar offsets so that Lakitu flies closer to Mario.
  */
-CmdRet cutscene_grand_star_fly_move_to_mario(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_grand_star_fly_move_to_mario(UNUSED struct Camera *c) {
     Vec3f posOff;
 
     vec3f_set(posOff, -600.f, 0.f, -400.f);
@@ -7501,13 +7582,13 @@ CmdRet cutscene_grand_star_fly_move_to_mario(UNUSED struct Camera *c) {
 }
 
 /**
- * Gradually increase the cvar offsets so lakitu flies away. Mario flies offscreen to the right.
+ * Gradually increase the cvar offsets so Lakitu flies away. Mario flies offscreen to the right.
  *
- * cvar4 is the position offset from mario.
- * cvar5 is the focus offset from mario.
+ * cvar4 is the position offset from Mario.
+ * cvar5 is the focus offset from Mario.
  * cvar8.point[0] is the approach velocity.
  */
-CmdRet cutscene_grand_star_fly_mario_offscreen(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_grand_star_fly_mario_offscreen(UNUSED struct Camera *c) {
     camera_approach_f32_symmetric_bool(&sCutsceneVars[8].point[0], 15.f, 0.1f);
 
     camera_approach_f32_symmetric_bool(&sCutsceneVars[4].point[0], -2000.f, sCutsceneVars[8].point[0]);
@@ -7515,16 +7596,16 @@ CmdRet cutscene_grand_star_fly_mario_offscreen(UNUSED struct Camera *c) {
     camera_approach_f32_symmetric_bool(&sCutsceneVars[4].point[2], 1000.f, sCutsceneVars[8].point[0] / 10.f);
 
     camera_approach_f32_symmetric_bool(&sCutsceneVars[5].point[0], 0.f, sCutsceneVars[8].point[0]);
-    camera_approach_f32_symmetric_bool(&sCutsceneVars[5].point[1], 1200.f, sCutsceneVars[8].point[0] / 2.f);
+    camera_approach_f32_symmetric_bool(&sCutsceneVars[5].point[1], 1200.f, sCutsceneVars[8].point[0] / 2);
     camera_approach_f32_symmetric_bool(&sCutsceneVars[5].point[2], 1000.f, sCutsceneVars[8].point[0] / 1.5f);
 }
 
 /**
- * Make lakitu approach the cvars.
+ * Make Lakitu approach the cvars.
  * cvar4 is the position offset.
  * cvar5 is the focus offset.
  */
-CmdRet cutscene_grand_star_fly_app_cvars(struct Camera *c) {
+BAD_RETURN(s32) cutscene_grand_star_fly_app_cvars(struct Camera *c) {
     Vec3f goalPos, goalFoc;
     f32 dist;
     s16 pitch, yaw;
@@ -7543,15 +7624,15 @@ CmdRet cutscene_grand_star_fly_app_cvars(struct Camera *c) {
 }
 
 /**
- * Part of the grand star cutscene, starts after mario is flying.
+ * Part of the grand star cutscene, starts after Mario is flying.
  *
- * cvar4 and cvar5 are directions, relative to mario:
- * cvar4 is used as the camera position's offset from mario.
- * cvar5 is used as the camera focus's offset from mario.
+ * cvar4 and cvar5 are directions, relative to Mario:
+ * cvar4 is used as the camera position's offset from Mario.
+ * cvar5 is used as the camera focus's offset from Mario.
  *
- * cvar8.point[2] is lakitu's speed.
+ * cvar8.point[2] is Lakitu's speed.
  */
-CmdRet cutscene_grand_star_fly(struct Camera *c) {
+BAD_RETURN(s32) cutscene_grand_star_fly(struct Camera *c) {
     sStatusFlags |= CAM_FLAG_SMOOTH_MOVEMENT;
     cutscene_event(cutscene_grand_star_fly_start, c, 0, 0);
     cutscene_event(cutscene_grand_star_fly_move_to_mario, c, 0, 140);
@@ -7560,9 +7641,9 @@ CmdRet cutscene_grand_star_fly(struct Camera *c) {
 }
 
 /**
- * Adjust the camera focus towards a point `dist` units in front of mario.
- * @param dist distance in mario's forward direction. Note that this is relative to mario, so a negative
- *        distance will focus in front of mario, and a positive distance will focus behind him.
+ * Adjust the camera focus towards a point `dist` units in front of Mario.
+ * @param dist distance in Mario's forward direction. Note that this is relative to Mario, so a negative
+ *        distance will focus in front of Mario, and a positive distance will focus behind him.
  */
 void focus_in_front_of_mario(struct Camera *c, f32 dist, f32 speed) {
     Vec3f goalFocus, offset;
@@ -7576,10 +7657,10 @@ void focus_in_front_of_mario(struct Camera *c, f32 dist, f32 speed) {
 }
 
 /**
- * Approach mario and look up. Since mario faces the camera when he collects the star, there's no need
+ * Approach Mario and look up. Since Mario faces the camera when he collects the star, there's no need
  * to worry about the camera's yaw.
  */
-CmdRet cutscene_dance_move_to_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_dance_move_to_mario(struct Camera *c) {
     s16 pitch, yaw;
     f32 dist;
 
@@ -7589,60 +7670,60 @@ CmdRet cutscene_dance_move_to_mario(struct Camera *c) {
     vec3f_set_dist_and_angle(sMarioCamState->pos, c->pos, dist, pitch, yaw);
 }
 
-CmdRet cutscene_dance_rotate(struct Camera *c) {
+BAD_RETURN(s32) cutscene_dance_rotate(struct Camera *c) {
     rotate_and_move_vec3f(c->pos, sMarioCamState->pos, 0, 0, 0x200);
 }
 
-CmdRet cutscene_dance_rotate_move_back(struct Camera *c) {
+BAD_RETURN(s32) cutscene_dance_rotate_move_back(struct Camera *c) {
     rotate_and_move_vec3f(c->pos, sMarioCamState->pos, -15.f, 0, 0);
 }
 
-CmdRet cutscene_dance_rotate_move_towards_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_dance_rotate_move_towards_mario(struct Camera *c) {
     rotate_and_move_vec3f(c->pos, sMarioCamState->pos, 20.f, 0, 0);
 }
 
 /**
  * Speculated to be dance-related due to its proximity to the other dance functions
  */
-CmdRet cutscene_dance_unused(UNUSED struct Camera *c) {
+static BAD_RETURN(s32) cutscene_dance_unused(UNUSED struct Camera *c) {
 }
 
 /**
- * Slowly turn to the point 100 units in front of mario
+ * Slowly turn to the point 100 units in front of Mario
  */
-CmdRet cutscene_dance_default_focus_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_dance_default_focus_mario(struct Camera *c) {
     focus_in_front_of_mario(c, -100.f, 0.2f);
 }
 
 /**
  * Focus twice as far away as default dance, and move faster.
  */
-CmdRet cutscene_dance_rotate_focus_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_dance_rotate_focus_mario(struct Camera *c) {
     focus_in_front_of_mario(c, -200.f, 0.03f);
 }
 
-CmdRet cutscene_dance_shake_fov(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_dance_shake_fov(UNUSED struct Camera *c) {
     set_fov_shake(0x200, 0x28, 0x8000);
 }
 
 /**
  * Handles both the default and rotate dance cutscenes.
- * In the default dance: the camera moves closer to mario, then stays in place.
- * In the rotate dance: the camera moves closer and rotates clockwise around mario.
+ * In the default dance: the camera moves closer to Mario, then stays in place.
+ * In the rotate dance: the camera moves closer and rotates clockwise around Mario.
  */
-CmdRet cutscene_dance_default_rotate(struct Camera *c) {
+BAD_RETURN(s32) cutscene_dance_default_rotate(struct Camera *c) {
     sStatusFlags |= CAM_FLAG_SMOOTH_MOVEMENT;
     sYawSpeed = 0;
     set_fov_function(CAM_FOV_DEFAULT);
     cutscene_event(cutscene_dance_default_focus_mario, c, 0, 20);
     cutscene_event(cutscene_dance_move_to_mario, c, 0, 39);
-    // Shake the camera on the 4th beat of the music, when mario gives the peace sign.
+    // Shake the camera on the 4th beat of the music, when Mario gives the peace sign.
     cutscene_event(cutscene_dance_shake_fov, c, 40, 40);
 
     if (c->cutscene != CUTSCENE_DANCE_DEFAULT) { // CUTSCENE_DANCE_ROTATE
         cutscene_event(cutscene_dance_rotate_focus_mario, c, 75, 102);
         cutscene_event(cutscene_dance_rotate, c, 50, -1);
-        // These two functions move the camera away and then towards mario.
+        // These two functions move the camera away and then towards Mario.
         cutscene_event(cutscene_dance_rotate_move_back, c, 50, 80);
         cutscene_event(cutscene_dance_rotate_move_towards_mario, c, 70, 90);
     } else {
@@ -7661,7 +7742,7 @@ CmdRet cutscene_dance_default_rotate(struct Camera *c) {
 /**
  * If the camera's yaw is out of the range of `absYaw` +- `yawMax`, then set the yaw to `absYaw`
  */
-CmdRet star_dance_bound_yaw(struct Camera *c, s16 absYaw, s16 yawMax) {
+BAD_RETURN(s32) star_dance_bound_yaw(struct Camera *c, s16 absYaw, s16 yawMax) {
     s16 dummyPitch, yaw;
     f32 distCamToMario;
     s16 yawFromAbs;
@@ -7684,7 +7765,7 @@ CmdRet star_dance_bound_yaw(struct Camera *c, s16 absYaw, s16 yawMax) {
  * Start the closeup dance cutscene by restricting the camera's yaw in certain areas.
  * Store the camera's focus in cvar9.
  */
-CmdRet cutscene_dance_closeup_start(struct Camera *c) {
+BAD_RETURN(s32) cutscene_dance_closeup_start(struct Camera *c) {
     UNUSED s32 pad[2];
 
     if ((gLastCompletedStarNum == 4) && (gCurrCourseNum == COURSE_JRB)) {
@@ -7703,9 +7784,9 @@ CmdRet cutscene_dance_closeup_start(struct Camera *c) {
 }
 
 /**
- * Focus the camera on mario eye height.
+ * Focus the camera on Mario eye height.
  */
-CmdRet cutscene_dance_closeup_focus_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_dance_closeup_focus_mario(struct Camera *c) {
     Vec3f marioPos;
 
     vec3f_set(marioPos, sMarioCamState->pos[0], sMarioCamState->pos[1] + 125.f, sMarioCamState->pos[2]);
@@ -7714,9 +7795,9 @@ CmdRet cutscene_dance_closeup_focus_mario(struct Camera *c) {
 }
 
 /**
- * Fly above mario, looking down.
+ * Fly above Mario, looking down.
  */
-CmdRet cutscene_dance_closeup_fly_above(struct Camera *c) {
+BAD_RETURN(s32) cutscene_dance_closeup_fly_above(struct Camera *c) {
     s16 pitch, yaw;
     f32 dist;
     s16 goalPitch = 0x1800;
@@ -7734,9 +7815,9 @@ CmdRet cutscene_dance_closeup_fly_above(struct Camera *c) {
 }
 
 /**
- * Fly closer right when mario gives the peace sign.
+ * Fly closer right when Mario gives the peace sign.
  */
-CmdRet cutscene_dance_closeup_fly_closer(struct Camera *c) {
+BAD_RETURN(s32) cutscene_dance_closeup_fly_closer(struct Camera *c) {
     s16 pitch, yaw;
     f32 dist;
 
@@ -7750,21 +7831,21 @@ CmdRet cutscene_dance_closeup_fly_closer(struct Camera *c) {
 /**
  * Zoom in by increasing fov to 80 degrees. Most dramatic zoom in the game.
  */
-CmdRet cutscene_dance_closeup_zoom(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_dance_closeup_zoom(UNUSED struct Camera *c) {
     set_fov_function(CAM_FOV_APP_80);
 }
 
 /**
- * Shake fov, starts on the first frame mario has the peace sign up.
+ * Shake fov, starts on the first frame Mario has the peace sign up.
  */
-CmdRet cutscene_dance_closeup_shake_fov(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_dance_closeup_shake_fov(UNUSED struct Camera *c) {
     set_fov_shake(0x300, 0x30, 0x8000);
 }
 
 /**
- * The camera moves in for a closeup on mario. Used for stars that are underwater or in tight places.
+ * The camera moves in for a closeup on Mario. Used for stars that are underwater or in tight places.
  */
-CmdRet cutscene_dance_closeup(struct Camera *c) {
+BAD_RETURN(s32) cutscene_dance_closeup(struct Camera *c) {
     sStatusFlags |= CAM_FLAG_SMOOTH_MOVEMENT;
 
     if (sMarioCamState->action == ACT_STAR_DANCE_WATER) {
@@ -7787,9 +7868,9 @@ CmdRet cutscene_dance_closeup(struct Camera *c) {
 }
 
 /**
- * cvar8.point[2] is the amount to increase distance from mario
+ * cvar8.point[2] is the amount to increase distance from Mario
  */
-CmdRet cutscene_dance_fly_away_start(struct Camera *c) {
+BAD_RETURN(s32) cutscene_dance_fly_away_start(struct Camera *c) {
     Vec3f areaCenter;
 
     vec3f_copy(sCutsceneVars[9].point, c->focus);
@@ -7816,7 +7897,7 @@ CmdRet cutscene_dance_fly_away_start(struct Camera *c) {
     }
 }
 
-CmdRet cutscene_dance_fly_away_approach_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_dance_fly_away_approach_mario(struct Camera *c) {
     s16 pitch, yaw;
     f32 dist;
 
@@ -7827,7 +7908,7 @@ CmdRet cutscene_dance_fly_away_approach_mario(struct Camera *c) {
     vec3f_set_dist_and_angle(sMarioCamState->pos, c->pos, dist, pitch, yaw);
 }
 
-CmdRet cutscene_dance_fly_away_focus_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_dance_fly_away_focus_mario(struct Camera *c) {
     Vec3f marioPos;
 
     vec3f_set(marioPos, sMarioCamState->pos[0], sMarioCamState->pos[1] + 125.f, sMarioCamState->pos[2]);
@@ -7846,28 +7927,28 @@ void cutscene_pan_cvar9(struct Camera *c) {
 }
 
 /**
- * Move backwards and rotate slowly around mario.
+ * Move backwards and rotate slowly around Mario.
  */
-CmdRet cutscene_dance_fly_rotate_around_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_dance_fly_rotate_around_mario(struct Camera *c) {
     cutscene_pan_cvar9(c);
     rotate_and_move_vec3f(c->pos, sMarioCamState->pos, sCutsceneVars[8].point[2], 0, 0);
 }
 
 /**
- * Rotate quickly while lakitu flies up.
+ * Rotate quickly while Lakitu flies up.
  */
-CmdRet cutscene_dance_fly_away_rotate_while_flying(struct Camera *c) {
+BAD_RETURN(s32) cutscene_dance_fly_away_rotate_while_flying(struct Camera *c) {
     rotate_and_move_vec3f(c->pos, sMarioCamState->pos, 0, 0, 0x80);
 }
 
-CmdRet cutscene_dance_fly_away_shake_fov(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_dance_fly_away_shake_fov(UNUSED struct Camera *c) {
     set_fov_shake(0x400, 0x30, 0x8000);
 }
 
 /**
- * After collecting the star, lakitu flies upwards out of the course.
+ * After collecting the star, Lakitu flies upwards out of the course.
  */
-CmdRet cutscene_dance_fly_away(struct Camera *c) {
+BAD_RETURN(s32) cutscene_dance_fly_away(struct Camera *c) {
     sStatusFlags |= CAM_FLAG_SMOOTH_MOVEMENT;
     cutscene_event(cutscene_dance_fly_away_start, c, 0, 0);
     cutscene_event(cutscene_dance_fly_away_focus_mario, c, 0, 30);
@@ -7883,23 +7964,23 @@ CmdRet cutscene_dance_fly_away(struct Camera *c) {
  * Jump the camera pos and focus to cvar 8 and 7.
  * Called every frame, starting after 10, so when these cvars are updated, the camera will jump.
  */
-CmdRet cutscene_key_dance_jump_cvar(struct Camera *c) {
+BAD_RETURN(s32) cutscene_key_dance_jump_cvar(struct Camera *c) {
     offset_rotated(c->pos, sMarioCamState->pos, sCutsceneVars[8].point, sMarioCamState->faceAngle);
     offset_rotated(c->focus, sMarioCamState->pos, sCutsceneVars[7].point, sMarioCamState->faceAngle);
 }
 
 /**
- * Jump to a closeup view of mario and the key.
+ * Jump to a closeup view of Mario and the key.
  */
-CmdRet cutscene_key_dance_jump_closeup(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_key_dance_jump_closeup(UNUSED struct Camera *c) {
     vec3f_set(sCutsceneVars[8].point, 38.f, 171.f, -248.f);
     vec3f_set(sCutsceneVars[7].point, -57.f, 51.f, 187.f);
 }
 
 /**
- * Jump to a view from the lower left (mario's right).
+ * Jump to a view from the lower left (Mario's right).
  */
-CmdRet cutscene_key_dance_jump_lower_left(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_key_dance_jump_lower_left(UNUSED struct Camera *c) {
     vec3f_set(sCutsceneVars[8].point, -178.f, 62.f, -132.f);
     vec3f_set(sCutsceneVars[7].point, 299.f, 91.f, 58.f);
 }
@@ -7907,38 +7988,38 @@ CmdRet cutscene_key_dance_jump_lower_left(UNUSED struct Camera *c) {
 /**
  * Jump to a rotated view from above.
  */
-CmdRet cutscene_key_dance_jump_above(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_key_dance_jump_above(UNUSED struct Camera *c) {
     gLakituState.keyDanceRoll = 0x2800;
     vec3f_set(sCutsceneVars[8].point, 89.f, 373.f, -304.f);
     vec3f_set(sCutsceneVars[7].point, 0.f, 127.f, 0.f);
 }
 
 /**
- * Finally, jump to a further view, slightly to mario's left.
+ * Finally, jump to a further view, slightly to Mario's left.
  */
-CmdRet cutscene_key_dance_jump_last(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_key_dance_jump_last(UNUSED struct Camera *c) {
     gLakituState.keyDanceRoll = 0;
     vec3f_set(sCutsceneVars[8].point, 135.f, 158.f, -673.f);
     vec3f_set(sCutsceneVars[7].point, -20.f, 135.f, -198.f);
 }
 
-CmdRet cutscene_key_dance_shake_fov(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_key_dance_shake_fov(UNUSED struct Camera *c) {
     set_fov_shake(0x180, 0x30, 0x8000);
 }
 
-CmdRet cutscene_key_dance_handheld_shake(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_key_dance_handheld_shake(UNUSED struct Camera *c) {
     set_handheld_shake(HAND_CAM_SHAKE_CUTSCENE);
 }
 
-CmdRet cutscene_key_dance_focus_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_key_dance_focus_mario(struct Camera *c) {
     focus_in_front_of_mario(c, 0, 0.2f);
 }
 
 /**
- * Cutscene that plays when mario collects a key from bowser. It's basically a sequence of four jump
+ * Cutscene that plays when Mario collects a key from bowser. It's basically a sequence of four jump
  * cuts.
  */
-CmdRet cutscene_key_dance(struct Camera *c) {
+BAD_RETURN(s32) cutscene_key_dance(struct Camera *c) {
     cutscene_event(cutscene_dance_move_to_mario, c, 0, 10);
     cutscene_event(cutscene_key_dance_focus_mario, c, 0, 10);
     cutscene_event(cutscene_key_dance_jump_closeup, c, 0, 0);
@@ -7950,14 +8031,14 @@ CmdRet cutscene_key_dance(struct Camera *c) {
     cutscene_event(cutscene_key_dance_handheld_shake, c, 52, -1);
 }
 
-CmdRet cutscene_bowser_area_shake_fov(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_bowser_area_shake_fov(UNUSED struct Camera *c) {
     cutscene_set_fov_shake_preset(2);
 }
 
 /**
  * Set oBowserUnk88 to 1, which causes bowser to start walking.
  */
-CmdRet cutscene_bowser_area_start_bowser_walking(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_bowser_area_start_bowser_walking(UNUSED struct Camera *c) {
     gSecondCameraFocus->oBowserUnk88 = 1;
 }
 
@@ -7966,7 +8047,7 @@ CmdRet cutscene_bowser_area_start_bowser_walking(UNUSED struct Camera *c) {
  * @bug cvar2.point is (0,0,0) on the first frame, but because of the warp transition, this behavior
  *      isn't seen. After the first frame, cvar2.point is bowser's position.
  */
-CmdRet cutscene_bowser_arena_set_pos(struct Camera *c) {
+BAD_RETURN(s32) cutscene_bowser_arena_set_pos(struct Camera *c) {
     vec3f_set_dist_and_angle(sCutsceneVars[2].point, c->pos, sCutsceneVars[3].point[2],
                                   sCutsceneVars[3].angle[0], sCutsceneVars[3].angle[1]);
     vec3f_set(sCutsceneVars[2].point, gSecondCameraFocus->oPosX, gSecondCameraFocus->oPosY,
@@ -7977,7 +8058,7 @@ CmdRet cutscene_bowser_arena_set_pos(struct Camera *c) {
  * Apply a sine wave to the focus's y coordinate.
  * The y offset starts at 120, then decreases to 0 before reaching ~240 on the last frame.
  */
-CmdRet cutscene_bowser_arena_focus_sine(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_bowser_arena_focus_sine(UNUSED struct Camera *c) {
     //! unused initialization
     f32 yOff = 150.0f;
 
@@ -7990,7 +8071,7 @@ CmdRet cutscene_bowser_arena_focus_sine(UNUSED struct Camera *c) {
 /**
  * Set the camera focus according to cvar0 and cvar2.
  */
-CmdRet cutscene_bowser_arena_set_focus(struct Camera *c) {
+BAD_RETURN(s32) cutscene_bowser_arena_set_focus(struct Camera *c) {
     offset_rotated(c->focus, sCutsceneVars[2].point, sCutsceneVars[0].point, sCutsceneVars[2].angle);
 }
 
@@ -7998,7 +8079,7 @@ CmdRet cutscene_bowser_arena_set_focus(struct Camera *c) {
  * Adjust the cvar offsets, making the camera look up, move slightly further back, and focus a little
  * further in front of bowser.
  */
-CmdRet cutscene_bowser_arena_adjust_offsets(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_bowser_arena_adjust_offsets(UNUSED struct Camera *c) {
     approach_s16_asymptotic_bool(&sCutsceneVars[3].angle[0], 0x6C8, 30);
     approach_f32_asymptotic_bool(&sCutsceneVars[0].point[2], -200.f, 0.02f);
     approach_f32_asymptotic_bool(&sCutsceneVars[3].point[2], 550.f, 0.02f);
@@ -8007,14 +8088,14 @@ CmdRet cutscene_bowser_arena_adjust_offsets(UNUSED struct Camera *c) {
 /**
  * Decrease cvar0's z offset, making the camera focus pan left towards bowser.
  */
-CmdRet cutscene_bowser_arena_pan_left(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_bowser_arena_pan_left(UNUSED struct Camera *c) {
     approach_f32_asymptotic_bool(&sCutsceneVars[0].point[2], 0.f, 0.05f);
 }
 
 /**
  * Duplicate of cutscene_mario_dialog().
  */
-CmdRet cutscene_bowser_arena_mario_dialog(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_bowser_arena_mario_dialog(UNUSED struct Camera *c) {
     cutscene_common_set_dialog_state(1);
 }
 
@@ -8029,7 +8110,7 @@ void cutscene_stop_dialog(UNUSED struct Camera *c) {
  *
  * cvar0 is the focus offset from bowser
  */
-CmdRet cutscene_bowser_arena_start(struct Camera *c) {
+BAD_RETURN(s32) cutscene_bowser_arena_start(struct Camera *c) {
     sCutsceneVars[3].point[2] = 430.f;
     sCutsceneVars[3].angle[1] = gSecondCameraFocus->oMoveAngleYaw - DEGREES(45);
     sCutsceneVars[3].angle[0] = 0xD90;
@@ -8048,9 +8129,9 @@ CmdRet cutscene_bowser_arena_start(struct Camera *c) {
 }
 
 /**
- * Create the dialog box depending on which bowser fight mario is in.
+ * Create the dialog box depending on which bowser fight Mario is in.
  */
-CmdRet bowser_fight_intro_dialog(UNUSED struct Camera *c) {
+BAD_RETURN(s32) bowser_fight_intro_dialog(UNUSED struct Camera *c) {
     s16 dialog;
 
     switch (gCurrLevelNum) {
@@ -8070,7 +8151,7 @@ CmdRet bowser_fight_intro_dialog(UNUSED struct Camera *c) {
 /**
  * Create the dialog box and wait until it's gone.
  */
-CmdRet cutscene_bowser_arena_dialog(struct Camera *c) {
+BAD_RETURN(s32) cutscene_bowser_arena_dialog(struct Camera *c) {
     cutscene_event(bowser_fight_intro_dialog, c, 0, 0);
 
     if (get_dialog_id() == -1) {
@@ -8081,20 +8162,19 @@ CmdRet cutscene_bowser_arena_dialog(struct Camera *c) {
 /**
  * End the bowser arena cutscene.
  */
-CmdRet cutscene_bowser_arena_end(struct Camera *c) {
+BAD_RETURN(s32) cutscene_bowser_arena_end(struct Camera *c) {
     cutscene_stop_dialog(c);
     c->cutscene = 0;
     transition_next_state(c, 20);
     sStatusFlags |= CAM_FLAG_UNUSED_CUTSCENE_ACTIVE;
     sModeOffsetYaw = sMarioCamState->faceAngle[1] + DEGREES(90);
-    //! This appears to do nothing
     gSecondCameraFocus->oBowserUnk88 = 2;
 }
 
 /**
- * Cutscene that plays when mario enters a bowser fight.
+ * Cutscene that plays when Mario enters a bowser fight.
  */
-CmdRet cutscene_bowser_arena(struct Camera *c) {
+BAD_RETURN(s32) cutscene_bowser_arena(struct Camera *c) {
     //! This does nothing, but may have been used in development
     cutscene_spawn_obj(2, 0);
 
@@ -8115,14 +8195,14 @@ CmdRet cutscene_bowser_arena(struct Camera *c) {
     }
 }
 
-CmdRet cutscene_star_spawn_store_info(struct Camera *c) {
+BAD_RETURN(s32) cutscene_star_spawn_store_info(struct Camera *c) {
     store_info_star(c);
 }
 
 /**
  * Focus on the top of the star.
  */
-CmdRet cutscene_star_spawn_focus_star(struct Camera *c) {
+BAD_RETURN(s32) cutscene_star_spawn_focus_star(struct Camera *c) {
     UNUSED f32 hMul;
     Vec3f starPos;
     UNUSED f32 vMul;
@@ -8137,7 +8217,7 @@ CmdRet cutscene_star_spawn_focus_star(struct Camera *c) {
 /**
  * Use boss fight mode's update function to move the focus back.
  */
-CmdRet cutscene_star_spawn_update_boss_fight(struct Camera *c) {
+BAD_RETURN(s32) cutscene_star_spawn_update_boss_fight(struct Camera *c) {
     Vec3f pos, focus;
 
     update_boss_fight_camera(c, focus, pos);
@@ -8148,7 +8228,7 @@ CmdRet cutscene_star_spawn_update_boss_fight(struct Camera *c) {
 /**
  * Fly back to the camera's previous pos and focus.
  */
-CmdRet cutscene_star_spawn_fly_back(struct Camera *c) {
+BAD_RETURN(s32) cutscene_star_spawn_fly_back(struct Camera *c) {
     retrieve_info_star(c);
     transition_next_state(c, 15);
 }
@@ -8156,7 +8236,7 @@ CmdRet cutscene_star_spawn_fly_back(struct Camera *c) {
 /**
  * Plays when a star spawns (ie from a box).
  */
-CmdRet cutscene_star_spawn(struct Camera *c) {
+BAD_RETURN(s32) cutscene_star_spawn(struct Camera *c) {
     cutscene_event(cutscene_star_spawn_store_info, c, 0, 0);
     cutscene_event(cutscene_star_spawn_focus_star, c, 0, -1);
     sStatusFlags |= CAM_FLAG_SMOOTH_MOVEMENT;
@@ -8168,9 +8248,9 @@ CmdRet cutscene_star_spawn(struct Camera *c) {
 }
 
 /**
- * Move the camera back to mario.
+ * Move the camera back to Mario.
  */
-CmdRet cutscene_star_spawn_back(struct Camera *c) {
+BAD_RETURN(s32) cutscene_star_spawn_back(struct Camera *c) {
     if ((c->mode == CAMERA_MODE_BOSS_FIGHT) && (set_cam_angle(0) == CAM_ANGLE_LAKITU)) {
         cutscene_event(cutscene_star_spawn_update_boss_fight, c, 0, -1);
     } else {
@@ -8181,54 +8261,54 @@ CmdRet cutscene_star_spawn_back(struct Camera *c) {
     sStatusFlags |= CAM_FLAG_UNUSED_CUTSCENE_ACTIVE;
 }
 
-CmdRet cutscene_star_spawn_end(struct Camera *c) {
+BAD_RETURN(s32) cutscene_star_spawn_end(struct Camera *c) {
     sStatusFlags |= CAM_FLAG_SMOOTH_MOVEMENT;
     gCutsceneTimer = CUTSCENE_STOP;
     c->cutscene = 0;
 }
 
-CmdRet cutscene_exit_waterfall_warp(struct Camera *c) {
+BAD_RETURN(s32) cutscene_exit_waterfall_warp(struct Camera *c) {
     //! hardcoded position
     vec3f_set(c->pos, -3899.f, 39.f, -5671.f);
 }
 
 /**
- * Look at mario, used by cutscenes that play when mario exits a course to castle grounds.
+ * Look at Mario, used by cutscenes that play when Mario exits a course to castle grounds.
  */
-CmdRet cutscene_exit_to_castle_grounds_focus_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_exit_to_castle_grounds_focus_mario(struct Camera *c) {
     vec3f_copy(c->focus, sMarioCamState->pos);
     c->focus[1] = c->pos[1] + (sMarioCamState->pos[1] + 125.f - c->pos[1]) * 0.5f;
     approach_vec3f_asymptotic(c->focus, sMarioCamState->pos, 0.05f, 0.4f, 0.05f);
 }
 
 /**
- * Cutscene that plays when mario leaves CotMC through the waterfall.
+ * Cutscene that plays when Mario leaves CotMC through the waterfall.
  */
-CmdRet cutscene_exit_waterfall(struct Camera *c) {
+BAD_RETURN(s32) cutscene_exit_waterfall(struct Camera *c) {
     cutscene_event(cutscene_exit_waterfall_warp, c, 0, 0);
     cutscene_event(cutscene_exit_to_castle_grounds_focus_mario, c, 0, -1);
     update_camera_yaw(c);
 }
 
 /**
- * End the cutscene, used by cutscenes that play when mario exits a course to castle grounds.
+ * End the cutscene, used by cutscenes that play when Mario exits a course to castle grounds.
  */
-CmdRet cutscene_exit_to_castle_grounds_end(struct Camera *c) {
+BAD_RETURN(s32) cutscene_exit_to_castle_grounds_end(struct Camera *c) {
     sStatusFlags |= CAM_FLAG_SMOOTH_MOVEMENT;
     gCutsceneTimer = CUTSCENE_STOP;
     c->cutscene = 0;
     update_camera_yaw(c);
 }
 
-CmdRet cutscene_exit_fall_to_castle_grounds_warp(struct Camera *c) {
+BAD_RETURN(s32) cutscene_exit_fall_to_castle_grounds_warp(struct Camera *c) {
     //! hardcoded position
     vec3f_set(c->pos, 5830.f, 32.f, 3985.f);
 }
 
 /**
- * Cutscene that plays when mario falls from WMOTR.
+ * Cutscene that plays when Mario falls from WMOTR.
  */
-CmdRet cutscene_exit_fall_to_castle_grounds(struct Camera *c) {
+BAD_RETURN(s32) cutscene_exit_fall_to_castle_grounds(struct Camera *c) {
     cutscene_event(cutscene_exit_fall_to_castle_grounds_warp, c, 0, 0);
     cutscene_event(cutscene_exit_to_castle_grounds_focus_mario, c, 0, -1);
     update_camera_yaw(c);
@@ -8237,7 +8317,7 @@ CmdRet cutscene_exit_fall_to_castle_grounds(struct Camera *c) {
 /**
  * Start the red coin star spawning cutscene.
  */
-CmdRet cutscene_red_coin_star_start(struct Camera *c) {
+BAD_RETURN(s32) cutscene_red_coin_star_start(struct Camera *c) {
     object_pos_to_vec3f(sCutsceneVars[1].point, gCutsceneFocus);
     store_info_star(c);
     // Store the default fov for after the cutscene
@@ -8247,7 +8327,7 @@ CmdRet cutscene_red_coin_star_start(struct Camera *c) {
 /**
  * Look towards the star's x and z position
  */
-CmdRet cutscene_red_coin_star_focus_xz(struct Camera *c) {
+BAD_RETURN(s32) cutscene_red_coin_star_focus_xz(struct Camera *c) {
     approach_f32_asymptotic_bool(&c->focus[0], gCutsceneFocus->oPosX, 0.15f);
     approach_f32_asymptotic_bool(&c->focus[2], gCutsceneFocus->oPosZ, 0.15f);
 }
@@ -8255,21 +8335,21 @@ CmdRet cutscene_red_coin_star_focus_xz(struct Camera *c) {
 /**
  * Look towards the star's y position. Only active before the camera warp.
  */
-CmdRet cutscene_red_coin_star_focus_y(struct Camera *c) {
+BAD_RETURN(s32) cutscene_red_coin_star_focus_y(struct Camera *c) {
     approach_f32_asymptotic_bool(&c->focus[1], gCutsceneFocus->oPosY, 0.1f);
 }
 
 /**
  * Look 80% up towards the star. Only active after the camera warp.
  */
-CmdRet cutscene_red_coin_star_look_up_at_star(struct Camera *c) {
+BAD_RETURN(s32) cutscene_red_coin_star_look_up_at_star(struct Camera *c) {
     c->focus[1] = sCutsceneVars[1].point[1] + (gCutsceneFocus->oPosY - sCutsceneVars[1].point[1]) * 0.8f;
 }
 
 /**
  * Warp the camera near the star's spawn point
  */
-CmdRet cutscene_red_coin_star_warp(struct Camera *c) {
+BAD_RETURN(s32) cutscene_red_coin_star_warp(struct Camera *c) {
     f32 dist;
     s16 pitch, yaw, posYaw;
     struct Object *o = gCutsceneFocus;
@@ -8292,11 +8372,11 @@ CmdRet cutscene_red_coin_star_warp(struct Camera *c) {
 /**
  * Zoom out while looking at the star.
  */
-CmdRet cutscene_red_coin_star_set_fov(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_red_coin_star_set_fov(UNUSED struct Camera *c) {
     sFOVState.fov = 60.f;
 }
 
-CmdRet cutscene_red_coin_star(struct Camera *c) {
+BAD_RETURN(s32) cutscene_red_coin_star(struct Camera *c) {
     sStatusFlags |= CAM_FLAG_SMOOTH_MOVEMENT;
     cutscene_event(cutscene_red_coin_star_start, c, 0, 0);
     cutscene_event(cutscene_red_coin_star_warp, c, 30, 30);
@@ -8314,7 +8394,7 @@ CmdRet cutscene_red_coin_star(struct Camera *c) {
 /**
  * End the red coin star spawning cutscene
  */
-CmdRet cutscene_red_coin_star_end(struct Camera *c) {
+BAD_RETURN(s32) cutscene_red_coin_star_end(struct Camera *c) {
     retrieve_info_star(c);
     gCutsceneTimer = CUTSCENE_STOP;
     c->cutscene = 0;
@@ -8340,7 +8420,7 @@ void cutscene_goto_cvar_pos(struct Camera *c, f32 goalDist, s16 goalPitch, s16 r
     s16 cannonPitch, cannonYaw;
     f32 curDist;
     s16 curPitch, curYaw;
-    UNUSED f32 unused2, unused3;
+    UNUSED f64 unused2;
     vec3f_get_dist_and_angle(sCutsceneVars[3].point, c->pos, &nextDist, &nextPitch, &nextYaw);
     // If over 8000 units away from the cannon, just teleport there
     if ((nextDist > 8000.f) && (c->cutscene == CUTSCENE_PREPARE_CANNON)) {
@@ -8390,7 +8470,7 @@ void cutscene_goto_cvar_pos(struct Camera *c, f32 goalDist, s16 goalPitch, s16 r
 /**
  * Store the camera's pos and focus, and copy the cannon's position to cvars.
  */
-CmdRet cutscene_prepare_cannon_start(struct Camera *c) {
+BAD_RETURN(s32) cutscene_prepare_cannon_start(struct Camera *c) {
     store_info_cannon(c);
     vec3f_copy(sCutsceneVars[0].point, c->focus);
     sCutsceneVars[2].point[0] = 30.f;
@@ -8402,7 +8482,7 @@ CmdRet cutscene_prepare_cannon_start(struct Camera *c) {
 /**
  * Fly towards the cannon door.
  */
-CmdRet cutscene_prepare_cannon_fly_to_cannon(struct Camera *c) {
+BAD_RETURN(s32) cutscene_prepare_cannon_fly_to_cannon(struct Camera *c) {
     cutscene_goto_cvar_pos(c, 300.f, 0x2000, 0, sCutsceneVars[5].angle[1]);
     camera_approach_s16_symmetric_bool(&sCutsceneVars[5].angle[1], 0x400, 17);
     set_handheld_shake(HAND_CAM_SHAKE_CUTSCENE);
@@ -8419,7 +8499,7 @@ void cannon_approach_prev(f32 *value, f32 target) {
 /**
  * Fly or warp back to the previous pos and focus, stored in sCameraStoreCutscene.
  */
-CmdRet cutscene_prepare_cannon_fly_back(struct Camera *c) {
+BAD_RETURN(s32) cutscene_prepare_cannon_fly_back(struct Camera *c) {
     f32 distToPrevPos = calc_abs_dist(c->pos, sCameraStoreCutscene.pos);
 
     if (distToPrevPos < 8000.f) {
@@ -8443,7 +8523,7 @@ CmdRet cutscene_prepare_cannon_fly_back(struct Camera *c) {
 /**
  * Cutscene that plays when the cannon is opened.
  */
-CmdRet cutscene_prepare_cannon(struct Camera *c) {
+BAD_RETURN(s32) cutscene_prepare_cannon(struct Camera *c) {
     sStatusFlags |= CAM_FLAG_SMOOTH_MOVEMENT;
     cutscene_event(cutscene_prepare_cannon_start, c, 0, 0);
     cutscene_event(cutscene_prepare_cannon_fly_to_cannon, c, 0, 140);
@@ -8453,7 +8533,7 @@ CmdRet cutscene_prepare_cannon(struct Camera *c) {
 /**
  * Stop the cannon opening cutscene.
  */
-CmdRet cutscene_prepare_cannon_end(struct Camera *c) {
+BAD_RETURN(s32) cutscene_prepare_cannon_end(struct Camera *c) {
     gCutsceneTimer = CUTSCENE_STOP;
     c->cutscene = 0;
     retrieve_info_cannon(c);
@@ -8461,9 +8541,9 @@ CmdRet cutscene_prepare_cannon_end(struct Camera *c) {
 }
 
 /**
- * Moves the camera to mario's side when mario starts ACT_WATER_DEATH
- * Note that ACT_WATER_DEATH only starts when mario gets hit by an enemy under water. It does not start
- * when mario drowns.
+ * Moves the camera to Mario's side when Mario starts ACT_WATER_DEATH
+ * Note that ACT_WATER_DEATH only starts when Mario gets hit by an enemy under water. It does not start
+ * when Mario drowns.
  */
 void water_death_move_to_mario_side(struct Camera *c) {
     f32 dist;
@@ -8481,37 +8561,37 @@ void death_goto_mario(struct Camera *c) {
     cutscene_goto_cvar_pos(c, 400.f, 0x1000, 0x300, 0);
 }
 
-CmdRet cutscene_death_standing_start(struct Camera *c) {
+BAD_RETURN(s32) cutscene_death_standing_start(struct Camera *c) {
     vec3f_copy(sCutsceneVars[0].point, c->focus);
     vec3f_copy(sCutsceneVars[3].point, sMarioCamState->pos);
     sCutsceneVars[3].point[1] += 70.f;
 }
 
 /**
- * Fly to mario and turn on handheld shake.
+ * Fly to Mario and turn on handheld shake.
  */
-CmdRet cutscene_death_standing_goto_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_death_standing_goto_mario(struct Camera *c) {
     death_goto_mario(c);
     set_handheld_shake(HAND_CAM_SHAKE_HIGH);
 }
 
 /**
- * Cutscene that plays when mario dies while standing.
+ * Cutscene that plays when Mario dies while standing.
  */
-CmdRet cutscene_death_standing(struct Camera *c) {
+BAD_RETURN(s32) cutscene_death_standing(struct Camera *c) {
     cutscene_event(cutscene_death_standing_start, c, 0, 0);
     cutscene_event(cutscene_death_standing_goto_mario, c, 0, -1);
     sStatusFlags |= CAM_FLAG_SMOOTH_MOVEMENT;
 }
 
-CmdRet cutscene_death_stomach_start(struct Camera *c) {
+BAD_RETURN(s32) cutscene_death_stomach_start(struct Camera *c) {
     Vec3f offset = { 0, 40.f, -60.f };
 
     offset_rotated(sCutsceneVars[3].point, sMarioCamState->pos, offset, sMarioCamState->faceAngle);
     vec3f_copy(sCutsceneVars[0].point, c->focus);
 }
 
-CmdRet cutscene_death_stomach_goto_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_death_stomach_goto_mario(struct Camera *c) {
     cutscene_goto_cvar_pos(c, 400.f, 0x1800, 0, -0x400);
 }
 
@@ -8523,30 +8603,30 @@ static void unused_water_death_move_to_side_of_mario(struct Camera *c) {
 }
 
 /**
- * Cutscene that plays when mario dies on his stomach.
+ * Cutscene that plays when Mario dies on his stomach.
  */
-CmdRet cutscene_death_stomach(struct Camera *c) {
+BAD_RETURN(s32) cutscene_death_stomach(struct Camera *c) {
     cutscene_event(cutscene_death_stomach_start, c, 0, 0);
     cutscene_event(cutscene_death_stomach_goto_mario, c, 0, -1);
     sStatusFlags |= CAM_FLAG_SMOOTH_MOVEMENT;
     set_handheld_shake(HAND_CAM_SHAKE_CUTSCENE);
 }
 
-CmdRet cutscene_bbh_death_start(struct Camera *c) {
+BAD_RETURN(s32) cutscene_bbh_death_start(struct Camera *c) {
     Vec3f dir = { 0, 40.f, 60.f };
 
     offset_rotated(sCutsceneVars[3].point, sMarioCamState->pos, dir, sMarioCamState->faceAngle);
     vec3f_copy(sCutsceneVars[0].point, c->focus);
 }
 
-CmdRet cutscene_bbh_death_goto_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_bbh_death_goto_mario(struct Camera *c) {
     cutscene_goto_cvar_pos(c, 400.f, 0x1800, 0, 0x400);
 }
 
 /**
- * Cutscene that plays when mario dies in BBH.
+ * Cutscene that plays when Mario dies in BBH.
  */
-CmdRet cutscene_bbh_death(struct Camera *c) {
+BAD_RETURN(s32) cutscene_bbh_death(struct Camera *c) {
     cutscene_event(cutscene_bbh_death_start, c, 0, 0);
     cutscene_event(cutscene_bbh_death_goto_mario, c, 0, -1);
     sStatusFlags |= CAM_FLAG_SMOOTH_MOVEMENT;
@@ -8556,14 +8636,14 @@ CmdRet cutscene_bbh_death(struct Camera *c) {
 /**
  * Copy the camera's focus to cvar0
  */
-CmdRet cutscene_quicksand_death_start(struct Camera *c) {
+BAD_RETURN(s32) cutscene_quicksand_death_start(struct Camera *c) {
     vec3f_copy(sCutsceneVars[0].point, c->focus);
 }
 
 /**
- * Fly closer to mario. In WATER_DEATH, move to mario's side.
+ * Fly closer to Mario. In WATER_DEATH, move to Mario's side.
  */
-CmdRet cutscene_quicksand_death_goto_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_quicksand_death_goto_mario(struct Camera *c) {
     cutscene_goto_cvar_pos(c, 400.f, 0x2800, 0x200, 0);
 
     if (c->cutscene == CUTSCENE_WATER_DEATH) {
@@ -8572,9 +8652,9 @@ CmdRet cutscene_quicksand_death_goto_mario(struct Camera *c) {
 }
 
 /**
- * Cutscene that plays when mario dies in quicksand.
+ * Cutscene that plays when Mario dies in quicksand.
  */
-CmdRet cutscene_quicksand_death(struct Camera *c) {
+BAD_RETURN(s32) cutscene_quicksand_death(struct Camera *c) {
     sCutsceneVars[3].point[0] = sMarioCamState->pos[0];
     sCutsceneVars[3].point[1] = sMarioCamState->pos[1] + 20.f;
     sCutsceneVars[3].point[2] = sMarioCamState->pos[2];
@@ -8586,9 +8666,9 @@ CmdRet cutscene_quicksand_death(struct Camera *c) {
 }
 
 /**
- * Fly away from mario near the end of the cutscene.
+ * Fly away from Mario near the end of the cutscene.
  */
-CmdRet cutscene_suffocation_fly_away(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_suffocation_fly_away(UNUSED struct Camera *c) {
     Vec3f target;
     Vec3f offset = { 0, 20.f, 120.f };
 
@@ -8597,9 +8677,9 @@ CmdRet cutscene_suffocation_fly_away(UNUSED struct Camera *c) {
 }
 
 /**
- * Keep lakitu above the gas level.
+ * Keep Lakitu above the gas level.
  */
-CmdRet cutscene_suffocation_stay_above_gas(struct Camera *c) {
+BAD_RETURN(s32) cutscene_suffocation_stay_above_gas(struct Camera *c) {
     UNUSED f32 unused1;
     f32 gasLevel;
     UNUSED f32 unused2;
@@ -8615,9 +8695,9 @@ CmdRet cutscene_suffocation_stay_above_gas(struct Camera *c) {
 }
 
 /**
- * Quickly rotate around mario.
+ * Quickly rotate around Mario.
  */
-CmdRet cutscene_suffocation_rotate(struct Camera *c) {
+BAD_RETURN(s32) cutscene_suffocation_rotate(struct Camera *c) {
     f32 dist;
     s16 pitch, yaw;
 
@@ -8627,9 +8707,9 @@ CmdRet cutscene_suffocation_rotate(struct Camera *c) {
 }
 
 /**
- * Cutscene that plays when mario dies from suffocation (ie due to HMC gas).
+ * Cutscene that plays when Mario dies from suffocation (ie due to HMC gas).
  */
-CmdRet cutscene_suffocation(struct Camera *c) {
+BAD_RETURN(s32) cutscene_suffocation(struct Camera *c) {
     cutscene_event(cutscene_death_stomach_start, c, 0, 0);
     cutscene_event(cutscene_suffocation_rotate, c, 0, -1);
     cutscene_event(cutscene_suffocation_stay_above_gas, c, 0, -1);
@@ -8638,7 +8718,7 @@ CmdRet cutscene_suffocation(struct Camera *c) {
     set_handheld_shake(HAND_CAM_SHAKE_HIGH);
 }
 
-CmdRet cutscene_enter_pool_start(struct Camera *c) {
+BAD_RETURN(s32) cutscene_enter_pool_start(struct Camera *c) {
     vec3f_copy(sCutsceneVars[3].point, sMarioCamState->pos);
 
     if (gCurrLevelNum == LEVEL_CASTLE) { // entering HMC
@@ -8651,13 +8731,13 @@ CmdRet cutscene_enter_pool_start(struct Camera *c) {
     vec3f_copy(sCutsceneVars[0].point, c->focus);
 }
 
-CmdRet cutscene_enter_pool_loop(struct Camera *c) {
+BAD_RETURN(s32) cutscene_enter_pool_loop(struct Camera *c) {
     UNUSED u32 pad[2];
 
     cutscene_goto_cvar_pos(c, 1200.f, 0x2000, 0x200, 0);
 }
 
-CmdRet cutscene_enter_pool(struct Camera *c) {
+BAD_RETURN(s32) cutscene_enter_pool(struct Camera *c) {
     cutscene_event(cutscene_enter_pool_start, c, 0, 0);
     cutscene_event(cutscene_enter_pool_loop, c, 0, -1);
     sStatusFlags |= CAM_FLAG_SMOOTH_MOVEMENT;
@@ -8667,7 +8747,7 @@ CmdRet cutscene_enter_pool(struct Camera *c) {
  * Store the camera focus in cvar1.
  * Store the area's center position (which happens to be the pyramid, in SSL) in cvar3.
  */
-CmdRet cutscene_pyramid_top_explode_start(struct Camera *c) {
+BAD_RETURN(s32) cutscene_pyramid_top_explode_start(struct Camera *c) {
     reset_pan_distance(c);
     store_info_cannon(c);
 
@@ -8678,14 +8758,14 @@ CmdRet cutscene_pyramid_top_explode_start(struct Camera *c) {
 /**
  * Zoom in on the pyramid.
  */
-CmdRet cutscene_pyramid_top_explode_zoom_in(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_pyramid_top_explode_zoom_in(UNUSED struct Camera *c) {
     set_fov_function(CAM_FOV_APP_30);
 }
 
 /**
  * Look at the pyramid top.
  */
-CmdRet cutscene_pyramid_top_explode_focus(struct Camera *c) {
+BAD_RETURN(s32) cutscene_pyramid_top_explode_focus(struct Camera *c) {
     approach_vec3f_asymptotic(c->focus, sCutsceneVars[3].point, 0.02f, 0.02f, 0.02f);
     sStatusFlags |= CAM_FLAG_SMOOTH_MOVEMENT;
 }
@@ -8693,7 +8773,7 @@ CmdRet cutscene_pyramid_top_explode_focus(struct Camera *c) {
 /**
  * Store the old pos and focus, then warp to the pyramid top.
  */
-CmdRet cutscene_pyramid_top_explode_warp(struct Camera *c) {
+BAD_RETURN(s32) cutscene_pyramid_top_explode_warp(struct Camera *c) {
     s16 pitch, yaw;
     f32 dist;
 
@@ -8712,7 +8792,7 @@ CmdRet cutscene_pyramid_top_explode_warp(struct Camera *c) {
 /**
  * Close up view of the spinning pyramid top as it rises.
  */
-CmdRet cutscene_pyramid_top_explode_closeup(struct Camera *c) {
+BAD_RETURN(s32) cutscene_pyramid_top_explode_closeup(struct Camera *c) {
     s16 pitch, yaw;
     f32 dist;
 
@@ -8729,14 +8809,14 @@ CmdRet cutscene_pyramid_top_explode_closeup(struct Camera *c) {
 /**
  * Shake the camera during the closeup.
  */
-CmdRet cutscene_pyramid_top_explode_cam_shake(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_pyramid_top_explode_cam_shake(UNUSED struct Camera *c) {
     set_environmental_camera_shake(SHAKE_ENV_PYRAMID_EXPLODE);
 }
 
 /**
  * Warp back to the old position, and start a heavy camera shake.
  */
-CmdRet cutscene_pyramid_top_explode_warp_back(struct Camera *c) {
+BAD_RETURN(s32) cutscene_pyramid_top_explode_warp_back(struct Camera *c) {
     UNUSED u32 pad[2];
 
     vec3f_copy(c->pos, sCutsceneVars[4].point);
@@ -8747,7 +8827,7 @@ CmdRet cutscene_pyramid_top_explode_warp_back(struct Camera *c) {
 /**
  * An unused cutscene for when the pyramid explodes.
  */
-CmdRet cutscene_pyramid_top_explode(struct Camera *c) {
+BAD_RETURN(s32) cutscene_pyramid_top_explode(struct Camera *c) {
     cutscene_event(cutscene_pyramid_top_explode_start, c, 0, 0);
     cutscene_event(cutscene_pyramid_top_explode_focus, c, 0, 30);
     cutscene_event(cutscene_pyramid_top_explode_warp, c, 31, 31);
@@ -8760,25 +8840,25 @@ CmdRet cutscene_pyramid_top_explode(struct Camera *c) {
 /**
  * End the pyramid top explosion cutscene.
  */
-CmdRet cutscene_pyramid_top_explode_end(struct Camera *c) {
+BAD_RETURN(s32) cutscene_pyramid_top_explode_end(struct Camera *c) {
     cutscene_stop_dialog(c);
     stop_cutscene_and_retrieve_stored_info(c);
-    // Move the camera back to mario
+    // Move the camera back to Mario
     transition_next_state(c, 30);
 }
 
 /**
  * Store the camera focus in cvar0, and store the top of the pyramid in cvar3.
  */
-CmdRet cutscene_enter_pyramid_top_start(struct Camera *c) {
+BAD_RETURN(s32) cutscene_enter_pyramid_top_start(struct Camera *c) {
     vec3f_copy(sCutsceneVars[0].point, c->focus);
     vec3f_set(sCutsceneVars[3].point, c->areaCenX, 1280.f, c->areaCenZ);
 }
 
 /**
- * Cutscene that plays when mario enters the top of the pyramid.
+ * Cutscene that plays when Mario enters the top of the pyramid.
  */
-CmdRet cutscene_enter_pyramid_top(struct Camera *c) {
+BAD_RETURN(s32) cutscene_enter_pyramid_top(struct Camera *c) {
     cutscene_event(cutscene_enter_pyramid_top_start, c, 0, 0);
     // Move to cvar3
     cutscene_goto_cvar_pos(c, 200.f, 0x3000, 0, 0);
@@ -8786,7 +8866,7 @@ CmdRet cutscene_enter_pyramid_top(struct Camera *c) {
     set_handheld_shake(HAND_CAM_SHAKE_CUTSCENE);
 
     if (sMarioCamState->pos[1] > 1250.f) {
-        // End the cutscene early if mario ledge-grabbed.
+        // End the cutscene early if Mario ledge-grabbed.
         // This only works because of the janky way that ledge-grabbing is implemented.
         cutscene_exit_to_castle_grounds_end(c);
     }
@@ -8801,12 +8881,12 @@ static void unused_cutscene_goto_cvar(struct Camera *c) {
 }
 
 /**
- * cvar8 is mario's position and faceAngle
+ * cvar8 is Mario's position and faceAngle
  *
  * cvar9.point is gCutsceneFocus's position
- * cvar9.angle[1] is the yaw between mario and the gCutsceneFocus
+ * cvar9.angle[1] is the yaw between Mario and the gCutsceneFocus
  */
-CmdRet cutscene_dialog_start(struct Camera *c) {
+BAD_RETURN(s32) cutscene_dialog_start(struct Camera *c) {
     UNUSED f32 unused1;
     UNUSED s16 unused2;
     s16 yaw;
@@ -8826,7 +8906,7 @@ CmdRet cutscene_dialog_start(struct Camera *c) {
     }
 #endif
 
-    // Store mario's position and faceAngle
+    // Store Mario's position and faceAngle
     sCutsceneVars[8].angle[0] = 0;
     vec3f_copy(sCutsceneVars[8].point, sMarioCamState->pos);
     sCutsceneVars[8].point[1] += 125.f;
@@ -8845,10 +8925,10 @@ CmdRet cutscene_dialog_start(struct Camera *c) {
 }
 
 /**
- * Move closer to mario and the object, adjusting to their difference in height.
- * The camera's generally ends up looking over mario's shoulder.
+ * Move closer to Mario and the object, adjusting to their difference in height.
+ * The camera's generally ends up looking over Mario's shoulder.
  */
-CmdRet cutscene_dialog_move_mario_shoulder(struct Camera *c) {
+BAD_RETURN(s32) cutscene_dialog_move_mario_shoulder(struct Camera *c) {
     f32 dist;
     s16 pitch, yaw;
     Vec3f focus, pos;
@@ -8870,7 +8950,7 @@ CmdRet cutscene_dialog_move_mario_shoulder(struct Camera *c) {
     approach_f32_asymptotic_bool(&dist, 180.f, 0.05f);
     vec3f_set_dist_and_angle(sCutsceneVars[8].point, pos, dist, pitch, yaw);
 
-    // Move up if mario is below the focus object, down is mario is above
+    // Move up if Mario is below the focus object, down is Mario is above
     pos[1] = sCutsceneVars[8].point[1]
               + sins(calculate_pitch(sCutsceneVars[9].point, sCutsceneVars[8].point)) * 100.f;
 
@@ -8882,7 +8962,7 @@ CmdRet cutscene_dialog_move_mario_shoulder(struct Camera *c) {
 /**
  * Create the dialog with sCutsceneDialogID
  */
-CmdRet cutscene_dialog_create_dialog_box(struct Camera *c) {
+BAD_RETURN(s32) cutscene_dialog_create_dialog_box(struct Camera *c) {
     if (c->cutscene == CUTSCENE_RACE_DIALOG) {
         create_dialog_box_with_response(sCutsceneDialogID);
     } else {
@@ -8894,9 +8974,9 @@ CmdRet cutscene_dialog_create_dialog_box(struct Camera *c) {
 }
 
 /**
- * Cutscene that plays when mario talks to an object.
+ * Cutscene that plays when Mario talks to an object.
  */
-CmdRet cutscene_dialog(struct Camera *c) {
+BAD_RETURN(s32) cutscene_dialog(struct Camera *c) {
     cutscene_event(cutscene_dialog_start, c, 0, 0);
     cutscene_event(cutscene_dialog_move_mario_shoulder, c, 0, -1);
     cutscene_event(cutscene_dialog_create_dialog_box, c, 10, 10);
@@ -8922,14 +9002,14 @@ CmdRet cutscene_dialog(struct Camera *c) {
 /**
  * Sets the CAM_FLAG_UNUSED_CUTSCENE_ACTIVE flag, which does nothing.
  */
-CmdRet cutscene_dialog_set_flag(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_dialog_set_flag(UNUSED struct Camera *c) {
     sStatusFlags |= CAM_FLAG_UNUSED_CUTSCENE_ACTIVE;
 }
 
 /**
  * Ends the dialog cutscene.
  */
-CmdRet cutscene_dialog_end(struct Camera *c) {
+BAD_RETURN(s32) cutscene_dialog_end(struct Camera *c) {
     sStatusFlags |= CAM_FLAG_UNUSED_CUTSCENE_ACTIVE;
     c->cutscene = 0;
     clear_time_stop_flags(TIME_STOP_ENABLED | TIME_STOP_DIALOG);
@@ -8940,7 +9020,7 @@ CmdRet cutscene_dialog_end(struct Camera *c) {
  *
  * In this cutscene, cvar0.angle[0] is used as a state variable.
  */
-CmdRet cutscene_read_message_start(struct Camera *c) {
+BAD_RETURN(s32) cutscene_read_message_start(struct Camera *c) {
     cutscene_soften_music(c);
     transition_next_state(c, 30);
     reset_pan_distance(c);
@@ -8962,9 +9042,9 @@ static void unused_cam_to_mario(struct Camera *c) {
 }
 
 /**
- * Cutscene that plays when mario is reading a message (a sign or message on the wall)
+ * Cutscene that plays when Mario is reading a message (a sign or message on the wall)
  */
-CmdRet cutscene_read_message(struct Camera *c) {
+BAD_RETURN(s32) cutscene_read_message(struct Camera *c) {
     UNUSED u32 pad[2];
 
     cutscene_event(cutscene_read_message_start, c, 0, 0);
@@ -9003,25 +9083,25 @@ CmdRet cutscene_read_message(struct Camera *c) {
 /**
  * Set CAM_FLAG_UNUSED_CUTSCENE_ACTIVE, which does nothing.
  */
-CmdRet cutscene_read_message_set_flag(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_read_message_set_flag(UNUSED struct Camera *c) {
     sStatusFlags |= CAM_FLAG_UNUSED_CUTSCENE_ACTIVE;
 }
 
 /**
  * End the message cutscene.
  */
-CmdRet cutscene_read_message_end(struct Camera *c) {
+BAD_RETURN(s32) cutscene_read_message_end(struct Camera *c) {
     sStatusFlags |= CAM_FLAG_UNUSED_CUTSCENE_ACTIVE;
     c->cutscene = 0;
 }
 
 /**
  * Set cvars:
- * cvar7 is mario's pos and angle
+ * cvar7 is Mario's pos and angle
  * cvar6 is the focus offset
  * cvar5 is the position offset
  */
-CmdRet cutscene_exit_succ_start(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_exit_succ_start(UNUSED struct Camera *c) {
     vec3f_copy(sCutsceneVars[7].point, sMarioCamState->pos);
     vec3s_copy(sCutsceneVars[7].angle, sMarioCamState->faceAngle);
     vec3f_set(sCutsceneVars[6].point, 6.f, 363.f, 543.f);
@@ -9029,9 +9109,9 @@ CmdRet cutscene_exit_succ_start(UNUSED struct Camera *c) {
 }
 
 /**
- * Set the camera pos depending on which level mario exited.
+ * Set the camera pos depending on which level Mario exited.
  */
-CmdRet cutscene_non_painting_set_cam_pos(struct Camera *c) {
+BAD_RETURN(s32) cutscene_non_painting_set_cam_pos(struct Camera *c) {
     UNUSED u32 unused1;
     struct Surface *floor;
     UNUSED Vec3f unused2;
@@ -9061,9 +9141,9 @@ CmdRet cutscene_non_painting_set_cam_pos(struct Camera *c) {
 }
 
 /**
- * Update the camera focus depending on which level mario exited.
+ * Update the camera focus depending on which level Mario exited.
  */
-CmdRet cutscene_non_painting_set_cam_focus(struct Camera *c) {
+BAD_RETURN(s32) cutscene_non_painting_set_cam_focus(struct Camera *c) {
     offset_rotated(c->focus, sCutsceneVars[7].point, sCutsceneVars[6].point, sCutsceneVars[7].angle);
 
     if ((gPrevLevel == LEVEL_COTMC) || (gPrevLevel == LEVEL_HMC) || (gPrevLevel == LEVEL_RR)
@@ -9077,9 +9157,9 @@ CmdRet cutscene_non_painting_set_cam_focus(struct Camera *c) {
 }
 
 /**
- * Focus slightly left of mario. Perhaps to keep the bowser painting in view?
+ * Focus slightly left of Mario. Perhaps to keep the bowser painting in view?
  */
-CmdRet cutscene_exit_bowser_succ_focus_left(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_exit_bowser_succ_focus_left(UNUSED struct Camera *c) {
     approach_f32_asymptotic_bool(&sCutsceneVars[6].point[0], -24.f, 0.05f);
 }
 
@@ -9087,7 +9167,7 @@ CmdRet cutscene_exit_bowser_succ_focus_left(UNUSED struct Camera *c) {
  * Instead of focusing on the key, just start a pitch shake. Clever!
  * The shake lasts 32 frames.
  */
-CmdRet cutscene_exit_bowser_key_toss_shake(struct Camera *c) {
+BAD_RETURN(s32) cutscene_exit_bowser_key_toss_shake(struct Camera *c) {
     //! Unnecessary check.
     if (c->cutscene == CUTSCENE_EXIT_BOWSER_SUCC) {
         set_camera_pitch_shake(0x800, 0x40, 0x800);
@@ -9095,16 +9175,16 @@ CmdRet cutscene_exit_bowser_key_toss_shake(struct Camera *c) {
 }
 
 /**
- * Start a camera shake when mario lands on the ground.
+ * Start a camera shake when Mario lands on the ground.
  */
-CmdRet cutscene_exit_succ_shake_landing(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_exit_succ_shake_landing(UNUSED struct Camera *c) {
     set_environmental_camera_shake(SHAKE_ENV_EXPLOSION);
 }
 
 /**
- * Cutscene that plays when mario beats bowser and exits the level.
+ * Cutscene that plays when Mario beats bowser and exits the level.
  */
-CmdRet cutscene_exit_bowser_succ(struct Camera *c) {
+BAD_RETURN(s32) cutscene_exit_bowser_succ(struct Camera *c) {
     cutscene_event(cutscene_exit_succ_start, c, 0, 0);
     cutscene_event(cutscene_non_painting_set_cam_pos, c, 0, -1);
     cutscene_event(cutscene_exit_bowser_succ_focus_left, c, 18, -1);
@@ -9116,7 +9196,7 @@ CmdRet cutscene_exit_bowser_succ(struct Camera *c) {
 /**
  * End a non-painting exit cutscene. Used by BBH and bowser courses.
  */
-CmdRet cutscene_non_painting_end(struct Camera *c) {
+BAD_RETURN(s32) cutscene_non_painting_end(struct Camera *c) {
     c->cutscene = 0;
 
     if (c->defMode == CAMERA_MODE_CLOSE) {
@@ -9134,14 +9214,14 @@ CmdRet cutscene_non_painting_end(struct Camera *c) {
 /**
  * Override the position offset.
  */
-CmdRet cutscene_exit_non_painting_succ_override_cvar(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_exit_non_painting_succ_override_cvar(UNUSED struct Camera *c) {
     vec3f_set(sCutsceneVars[5].point, 137.f, 246.f, 1115.f);
 }
 
 /**
- * Cutscene that plays when mario collects a star and leaves a non-painting course, like HMC or BBH.
+ * Cutscene that plays when Mario collects a star and leaves a non-painting course, like HMC or BBH.
  */
-CmdRet cutscene_exit_non_painting_succ(struct Camera *c) {
+BAD_RETURN(s32) cutscene_exit_non_painting_succ(struct Camera *c) {
     cutscene_event(cutscene_exit_succ_start, c, 0, 0);
     cutscene_event(cutscene_exit_non_painting_succ_override_cvar, c, 0, 0);
     cutscene_event(cutscene_non_painting_set_cam_pos, c, 0, -1);
@@ -9152,11 +9232,11 @@ CmdRet cutscene_exit_non_painting_succ(struct Camera *c) {
 }
 
 /**
- * Set cvar7 to mario's pos and faceAngle
- * Set cvar6 to the focus offset from mario.
- * set cvar5 to the pos offset from mario. (This is always overwritten)
+ * Set cvar7 to Mario's pos and faceAngle
+ * Set cvar6 to the focus offset from Mario.
+ * set cvar5 to the pos offset from Mario. (This is always overwritten)
  */
-CmdRet cutscene_non_painting_death_start(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_non_painting_death_start(UNUSED struct Camera *c) {
     vec3f_copy(sCutsceneVars[7].point, sMarioCamState->pos);
     vec3s_copy(sCutsceneVars[7].angle, sMarioCamState->faceAngle);
     vec3f_set(sCutsceneVars[6].point, -42.f, 350.f, 727.f);
@@ -9165,24 +9245,24 @@ CmdRet cutscene_non_painting_death_start(UNUSED struct Camera *c) {
 }
 
 /**
- * This cutscene is the same as non_painting_death, but the camera is closer to mario and lower.
+ * This cutscene is the same as non_painting_death, but the camera is closer to Mario and lower.
  * Because it it doesn't call cutscene_non_painting_death_override_offset, the value from
  * cutscene_non_painting_death_start is used.
  *
- * This cutscene is unused, dying in bowser's arena spawns mario near the warp pipe, not back in the
+ * This cutscene is unused, dying in bowser's arena spawns Mario near the warp pipe, not back in the
  * hub.
  */
-CmdRet cutscene_exit_bowser_death(struct Camera *c) {
+BAD_RETURN(s32) cutscene_exit_bowser_death(struct Camera *c) {
     cutscene_event(cutscene_non_painting_death_start, c, 0, 0);
     cutscene_event(cutscene_non_painting_set_cam_pos, c, 0, -1);
     cutscene_event(cutscene_non_painting_set_cam_focus, c, 0, -1);
 }
 
 /**
- * Set the offset from mario depending on the course mario exited.
+ * Set the offset from Mario depending on the course Mario exited.
  * This overrides cutscene_non_painting_death_start()
  */
-CmdRet cutscene_non_painting_death_override_offset(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_non_painting_death_override_offset(UNUSED struct Camera *c) {
     switch (gPrevLevel) {
         case LEVEL_HMC:
             vec3f_set(sCutsceneVars[5].point, 187.f, 369.f, -197.f);
@@ -9197,9 +9277,9 @@ CmdRet cutscene_non_painting_death_override_offset(UNUSED struct Camera *c) {
 }
 
 /**
- * Cutscene played when mario dies in a non-painting course, like HMC or BBH.
+ * Cutscene played when Mario dies in a non-painting course, like HMC or BBH.
  */
-CmdRet cutscene_non_painting_death(struct Camera *c) {
+BAD_RETURN(s32) cutscene_non_painting_death(struct Camera *c) {
     cutscene_event(cutscene_non_painting_death_start, c, 0, 0);
     cutscene_event(cutscene_non_painting_death_override_offset, c, 0, 0);
     cutscene_event(cutscene_non_painting_set_cam_pos, c, 0, -1);
@@ -9209,13 +9289,13 @@ CmdRet cutscene_non_painting_death(struct Camera *c) {
 
 /**
  * Set cvars:
- * cvar3 is an offset applied to the camera's rotation around mario. It starts at 0x1200
+ * cvar3 is an offset applied to the camera's rotation around Mario. It starts at 0x1200
  * cvar 1 is more complicated:
- *      First the yaw from mario to the camera is calculated. cvar1 is the high byte of the difference
- *      between that yaw and mario's faceAngle plus 0x1200. The reason for taking the high byte is
+ *      First the yaw from Mario to the camera is calculated. cvar1 is the high byte of the difference
+ *      between that yaw and Mario's faceAngle plus 0x1200. The reason for taking the high byte is
  *      because cvar1 rotates until is reaches 0, so it's important that it's a multiple of 0x100.
  */
-CmdRet cutscene_cap_switch_press_start(struct Camera *c) {
+BAD_RETURN(s32) cutscene_cap_switch_press_start(struct Camera *c) {
     UNUSED s16 unused1;
     s16 yaw;
     UNUSED u32 pad[2];
@@ -9223,15 +9303,15 @@ CmdRet cutscene_cap_switch_press_start(struct Camera *c) {
     store_info_star(c);
     yaw = calculate_yaw(sMarioCamState->pos, c->pos);
     sCutsceneVars[3].angle[1] = 0x1200;
-    // Basically the amount of rotation to get from behind mario to in front of mario
+    // Basically the amount of rotation to get from behind Mario to in front of Mario
     sCutsceneVars[1].angle[1] = (yaw - (sMarioCamState->faceAngle[1] + sCutsceneVars[3].angle[1])) & 0xFF00;
 }
 
 /**
- * Rotate around mario. As each cvar stops updating, the rotation slows until the camera ends up in
- * front of mario.
+ * Rotate around Mario. As each cvar stops updating, the rotation slows until the camera ends up in
+ * front of Mario.
  */
-CmdRet cutscene_cap_switch_press_rotate_around_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_cap_switch_press_rotate_around_mario(struct Camera *c) {
     f32 dist;
     s16 pitch, yaw;
     UNUSED s16 unusedYaw = sMarioCamState->faceAngle[1] + 0x1000;
@@ -9257,14 +9337,14 @@ CmdRet cutscene_cap_switch_press_rotate_around_mario(struct Camera *c) {
 /**
  * Move the camera slightly downwards.
  */
-CmdRet cutscene_cap_switch_press_lower_cam(struct Camera *c) {
+BAD_RETURN(s32) cutscene_cap_switch_press_lower_cam(struct Camera *c) {
     rotate_and_move_vec3f(c->pos, sMarioCamState->pos, 0, -0x20, 0);
 }
 
 /**
- * Move the camera closer to mario.
+ * Move the camera closer to Mario.
  */
-CmdRet cutscene_cap_switch_press_approach_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_cap_switch_press_approach_mario(struct Camera *c) {
     s16 pitch, yaw;
     f32 dist;
 
@@ -9279,9 +9359,9 @@ CmdRet cutscene_cap_switch_press_approach_mario(struct Camera *c) {
 }
 
 /**
- * Pan the camera left so that mario is on the right side of the screen when the camera stops spinning.
+ * Pan the camera left so that Mario is on the right side of the screen when the camera stops spinning.
  */
-CmdRet cutscene_cap_switch_press_pan_left(struct Camera *c) {
+BAD_RETURN(s32) cutscene_cap_switch_press_pan_left(struct Camera *c) {
     vec3f_copy(c->focus, sMarioCamState->pos);
     c->focus[1] += 110.f;
     camera_approach_s16_symmetric_bool(&sCutsceneVars[0].angle[1], 0x800, 0x20);
@@ -9291,19 +9371,19 @@ CmdRet cutscene_cap_switch_press_pan_left(struct Camera *c) {
 /**
  * Create a dialog box with the cap switch's text.
  */
-CmdRet cutscene_cap_switch_press_create_dialog(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_cap_switch_press_create_dialog(UNUSED struct Camera *c) {
     create_dialog_box_with_response(gCutsceneFocus->oBehParams2ndByte + DIALOG_010);
 }
 
-static UNUSED CmdRet unused_cap_switch_retrieve_info(struct Camera *c) {
+static UNUSED BAD_RETURN(s32) unused_cap_switch_retrieve_info(struct Camera *c) {
     retrieve_info_star(c);
     transition_next_state(c, 30);
 }
 
 /**
- * Cutscene that plays when mario presses a cap switch.
+ * Cutscene that plays when Mario presses a cap switch.
  */
-CmdRet cutscene_cap_switch_press(struct Camera *c) {
+BAD_RETURN(s32) cutscene_cap_switch_press(struct Camera *c) {
     f32 dist;
     s16 pitch, yaw;
 
@@ -9339,7 +9419,7 @@ CmdRet cutscene_cap_switch_press(struct Camera *c) {
  * cvar2 is the goal position
  * cvar3 is the goal focus
  */
-CmdRet cutscene_unlock_key_door_start(struct Camera *c) {
+BAD_RETURN(s32) cutscene_unlock_key_door_start(struct Camera *c) {
     Vec3f posOff, focusOff;
 
     vec3f_copy(sCutsceneVars[0].point, c->pos);
@@ -9351,10 +9431,10 @@ CmdRet cutscene_unlock_key_door_start(struct Camera *c) {
 }
 
 /**
- * Move the camera to the cvars position and focus, closer to mario.
+ * Move the camera to the cvars position and focus, closer to Mario.
  * Gives a better view of the key.
  */
-CmdRet cutscene_unlock_key_door_approach_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_unlock_key_door_approach_mario(struct Camera *c) {
     approach_vec3f_asymptotic(c->pos, sCutsceneVars[2].point, 0.1f, 0.1f, 0.1f);
     approach_vec3f_asymptotic(c->focus, sCutsceneVars[3].point, 0.1f, 0.1f, 0.1f);
 }
@@ -9362,17 +9442,17 @@ CmdRet cutscene_unlock_key_door_approach_mario(struct Camera *c) {
 /**
  * Move the camera focus up a bit, focusing on the key in the lock.
  */
-CmdRet cutscene_unlock_key_door_focus_lock(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_unlock_key_door_focus_lock(UNUSED struct Camera *c) {
     approach_f32_asymptotic_bool(&sCutsceneVars[3].point[1], sMarioCamState->pos[1] + 140.f, 0.07f);
 }
 
-CmdRet cutscene_unlock_key_door_stub(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_unlock_key_door_stub(UNUSED struct Camera *c) {
 }
 
 /**
  * Move back to the previous pos and focus, stored in cvar0 and cvar1.
  */
-CmdRet cutscene_unlock_key_door_fly_back(struct Camera *c) {
+BAD_RETURN(s32) cutscene_unlock_key_door_fly_back(struct Camera *c) {
     approach_vec3f_asymptotic(c->pos, sCutsceneVars[0].point, 0.1f, 0.1f, 0.1f);
     approach_vec3f_asymptotic(c->focus, sCutsceneVars[1].point, 0.1f, 0.1f, 0.1f);
 }
@@ -9380,14 +9460,14 @@ CmdRet cutscene_unlock_key_door_fly_back(struct Camera *c) {
 /**
  * Shake the camera's fov when the key is put in the lock.
  */
-CmdRet cutscene_unlock_key_door_fov_shake(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_unlock_key_door_fov_shake(UNUSED struct Camera *c) {
     cutscene_set_fov_shake_preset(1);
 }
 
 /**
- * Cutscene that plays when mario unlocks a key door.
+ * Cutscene that plays when Mario unlocks a key door.
  */
-CmdRet cutscene_unlock_key_door(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_unlock_key_door(UNUSED struct Camera *c) {
     cutscene_event(cutscene_unlock_key_door_start, c, 0, 0);
     cutscene_event(cutscene_unlock_key_door_approach_mario, c, 0, 123);
     cutscene_event(cutscene_unlock_key_door_fly_back, c, 124, -1);
@@ -9430,21 +9510,21 @@ s32 intro_peach_move_camera_start_to_pipe(struct Camera *c, struct CutsceneSplin
 /**
  * Create a dialog box with the letter text
  */
-CmdRet peach_letter_text(UNUSED struct Camera *c) {
+BAD_RETURN(s32) peach_letter_text(UNUSED struct Camera *c) {
     create_dialog_box(DIALOG_020);
 }
 
 #ifndef VERSION_JP
-CmdRet play_sound_peach_reading_letter(UNUSED struct Camera *c) {
+BAD_RETURN(s32) play_sound_peach_reading_letter(UNUSED struct Camera *c) {
     play_sound(SOUND_PEACH_DEAR_MARIO, gDefaultSoundArgs);
 }
 #endif
 
 /**
- * Move the camera from peach reading the letter all the way to mario's warp pipe. Follow the
+ * Move the camera from peach reading the letter all the way to Mario's warp pipe. Follow the
  * sIntroStartToPipe splines.
  */
-CmdRet cutscene_intro_peach_start_to_pipe_spline(struct Camera *c) {
+BAD_RETURN(s32) cutscene_intro_peach_start_to_pipe_spline(struct Camera *c) {
     if (intro_peach_move_camera_start_to_pipe(c, sIntroStartToPipePosition, sIntroStartToPipeFocus) != 0) {
         gCameraMovementFlags &= ~CAM_MOVE_C_UP_MODE;
         gCutsceneTimer = CUTSCENE_LOOP;
@@ -9452,9 +9532,9 @@ CmdRet cutscene_intro_peach_start_to_pipe_spline(struct Camera *c) {
 }
 
 /**
- * Loop the cutscene until mario exits the dialog.
+ * Loop the cutscene until Mario exits the dialog.
  */
-CmdRet cutscene_intro_peach_dialog(struct Camera *c) {
+BAD_RETURN(s32) cutscene_intro_peach_dialog(struct Camera *c) {
     if (get_dialog_id() == -1) {
         vec3f_copy(gLakituState.goalPos, c->pos);
         vec3f_copy(gLakituState.goalFocus, c->focus);
@@ -9464,19 +9544,19 @@ CmdRet cutscene_intro_peach_dialog(struct Camera *c) {
     }
 }
 
-CmdRet cutscene_intro_peach_follow_pipe_spline(struct Camera *c) {
+BAD_RETURN(s32) cutscene_intro_peach_follow_pipe_spline(struct Camera *c) {
     move_point_along_spline(c->pos, sIntroPipeToDialogPosition, &sCutsceneSplineSegment, &sCutsceneSplineSegmentProgress);
     move_point_along_spline(c->focus, sIntroPipeToDialogFocus, &sCutsceneSplineSegment, &sCutsceneSplineSegmentProgress);
 }
 
-CmdRet cutscene_intro_peach_clear_cutscene_status(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_intro_peach_clear_cutscene_status(UNUSED struct Camera *c) {
     sMarioCamState->cameraEvent = 0;
 }
 
 /**
  * Set fov to 8 degrees, then zoom out to 30.
  */
-CmdRet cutscene_intro_peach_zoom_fov(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_intro_peach_zoom_fov(UNUSED struct Camera *c) {
     sFOVState.fov = 8.f;
     set_fov_function(CAM_FOV_ZOOM_30);
 }
@@ -9484,7 +9564,7 @@ CmdRet cutscene_intro_peach_zoom_fov(UNUSED struct Camera *c) {
 /**
  * Reset the spline progress, turn on handheld shake.
  */
-CmdRet cutscene_intro_peach_reset_spline(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_intro_peach_reset_spline(UNUSED struct Camera *c) {
     sCutsceneSplineSegment = 0;
     sCutsceneSplineSegmentProgress = 0.1f;
     //! @bug since this event is only called for one frame, this handheld shake is turned off on the
@@ -9496,39 +9576,45 @@ CmdRet cutscene_intro_peach_reset_spline(UNUSED struct Camera *c) {
  * Turn off handheld shake. This was likely written before handheld shake was changed to turn off every
  * frame, as it's the only instance of HAND_CAM_SHAKE_OFF.
  */
-CmdRet cutscene_intro_peach_handheld_shake_off(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_intro_peach_handheld_shake_off(UNUSED struct Camera *c) {
     set_handheld_shake(HAND_CAM_SHAKE_OFF);
 }
 
-CmdRet intro_pipe_exit_text(UNUSED struct Camera *c) {
+BAD_RETURN(s32) intro_pipe_exit_text(UNUSED struct Camera *c) {
     create_dialog_box(DIALOG_033);
 }
 
 #ifndef VERSION_JP
-CmdRet play_sound_intro_turn_on_hud(UNUSED struct Camera *c) {
+BAD_RETURN(s32) play_sound_intro_turn_on_hud(UNUSED struct Camera *c) {
     play_sound_rbutton_changed();
 }
 #endif
 
 /**
- * Fly to the pipe. Near the end, the camera jumps to lakitu's position and the hud turns on.
+ * Fly to the pipe. Near the end, the camera jumps to Lakitu's position and the hud turns on.
  */
-CmdRet cutscene_intro_peach_fly_to_pipe(struct Camera *c) {
-#ifndef VERSION_JP
+BAD_RETURN(s32) cutscene_intro_peach_fly_to_pipe(struct Camera *c) {
+#if defined(VERSION_US) || defined(VERSION_SH)
     cutscene_event(play_sound_intro_turn_on_hud, c, 818, 818);
+#elif VERSION_EU
+    cutscene_event(play_sound_intro_turn_on_hud, c, 673, 673);
 #endif
     cutscene_spawn_obj(6, 1);
     cutscene_event(cutscene_intro_peach_start_flying_music, c, 0, 0);
     cutscene_event(cutscene_intro_peach_start_to_pipe_spline, c, 0, -1);
+#ifdef VERSION_EU
+    cutscene_event(cutscene_intro_peach_clear_cutscene_status, c, 572, 572);
+#else
     cutscene_event(cutscene_intro_peach_clear_cutscene_status, c, 717, 717);
+#endif
     clamp_pitch(c->pos, c->focus, 0x3B00, -0x3B00);
     sCutsceneVars[1].point[1] = 400.f;
 }
 
 /**
- * Lakitu flies around the warp pipe, then mario jumps out.
+ * Lakitu flies around the warp pipe, then Mario jumps out.
  */
-CmdRet cutscene_intro_peach_mario_appears(struct Camera *c) {
+BAD_RETURN(s32) cutscene_intro_peach_mario_appears(struct Camera *c) {
     UNUSED u32 pad[2];
 
     sMarioCamState->cameraEvent = 0;
@@ -9540,7 +9626,7 @@ CmdRet cutscene_intro_peach_mario_appears(struct Camera *c) {
     approach_f32_asymptotic_bool(&sCutsceneVars[1].point[1], 80.f + sMarioGeometry.currFloorHeight +
                                  (sMarioCamState->pos[1] - sMarioGeometry.currFloorHeight) * 1.1f, 0.4f);
 
-    // Make the camera look up as mario jumps out of the pipe
+    // Make the camera look up as Mario jumps out of the pipe
     if (c->focus[1] < sCutsceneVars[1].point[1]) {
         c->focus[1] = sCutsceneVars[1].point[1];
     }
@@ -9551,14 +9637,14 @@ CmdRet cutscene_intro_peach_mario_appears(struct Camera *c) {
 /**
  * Reset the fov. This gives the effect of peach zooming out as she fades.
  */
-CmdRet cutscene_intro_peach_reset_fov(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_intro_peach_reset_fov(UNUSED struct Camera *c) {
     set_fov_function(CAM_FOV_DEFAULT);
 }
 
 /**
- * Peach reads the letter to mario.
+ * Peach reads the letter to Mario.
  */
-CmdRet cutscene_intro_peach_letter(struct Camera *c) {
+BAD_RETURN(s32) cutscene_intro_peach_letter(struct Camera *c) {
     cutscene_spawn_obj(5, 0);
     cutscene_event(cutscene_intro_peach_zoom_fov, c, 0, 0);
     cutscene_event(cutscene_intro_peach_start_letter_music, c, 65, 65);
@@ -9582,7 +9668,7 @@ CmdRet cutscene_intro_peach_letter(struct Camera *c) {
 /**
  * Reset the spline progress.
  */
-CmdRet cutscene_end_waving_start(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_end_waving_start(UNUSED struct Camera *c) {
     cutscene_reset_spline();
 }
 
@@ -9629,7 +9715,7 @@ struct CutsceneSplinePoint gEndWavingFocus[] = {
     { 0, 0, { -156, 1718, 5086 } }, { 0, 0, { -156, 1718, 5086 } },  { 0, 0, { -156, 1718, 5086 } }
 };
 
-CmdRet cutscene_end_waving(struct Camera *c) {
+BAD_RETURN(s32) cutscene_end_waving(struct Camera *c) {
     cutscene_event(cutscene_end_waving_start, c, 0, 0);
     move_point_along_spline(c->pos, gEndWavingPos, &sCutsceneSplineSegment, &sCutsceneSplineSegmentProgress);
     move_point_along_spline(c->focus, gEndWavingFocus, &sCutsceneSplineSegment, &sCutsceneSplineSegmentProgress);
@@ -9639,7 +9725,7 @@ CmdRet cutscene_end_waving(struct Camera *c) {
 /**
  * Called on the first frame of the credits. Resets the spline progress.
  */
-CmdRet cutscene_credits_reset_spline(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_credits_reset_spline(UNUSED struct Camera *c) {
     cutscene_reset_spline();
 }
 
@@ -9687,37 +9773,88 @@ extern struct CutsceneSplinePoint sCcmOutsideCreditsSplineFocus[];
 /**
  * Follow splines through the courses of the game.
  */
-CmdRet cutscene_credits(struct Camera *c) {
+BAD_RETURN(s32) cutscene_credits(struct Camera *c) {
     struct CutsceneSplinePoint *focus, *pos;
 
     cutscene_event(cutscene_credits_reset_spline, c, 0, 0);
 
-#define SET_CREDITS_SPLINE(casenum, spline)                                                            \
-    case casenum:                                                                                      \
-        pos = spline ## Positions;                                                                     \
-        focus = spline ## Focus;                                                                       \
-        break;
-
     switch (gCurrLevelArea) {
-        SET_CREDITS_SPLINE(AREA_BOB, sBobCreditsSpline);
-        SET_CREDITS_SPLINE(AREA_WF, sWfCreditsSpline);
-        SET_CREDITS_SPLINE(AREA_JRB_MAIN, sJrbCreditsSpline);
-        SET_CREDITS_SPLINE(AREA_CCM_SLIDE, sCcmSlideCreditsSpline);
-        SET_CREDITS_SPLINE(AREA_BBH, sBbhCreditsSpline);
-        SET_CREDITS_SPLINE(AREA_HMC, sHmcCreditsSpline);
-        SET_CREDITS_SPLINE(AREA_THI_WIGGLER, sThiWigglerCreditsSpline);
-        SET_CREDITS_SPLINE(AREA_LLL_VOLCANO, sVolcanoCreditsSpline);
-        SET_CREDITS_SPLINE(AREA_SSL_OUTSIDE, sSslCreditsSpline);
-        SET_CREDITS_SPLINE(AREA_DDD_WHIRLPOOL, sDddCreditsSpline);
-        SET_CREDITS_SPLINE(AREA_SL_OUTSIDE, sSlCreditsSpline);
-        SET_CREDITS_SPLINE(AREA_WDW_MAIN, sWdwCreditsSpline);
-        SET_CREDITS_SPLINE(AREA_TTM_OUTSIDE, sTtmCreditsSpline);
-        SET_CREDITS_SPLINE(AREA_THI_HUGE, sThiHugeCreditsSpline);
-        SET_CREDITS_SPLINE(AREA_TTC, sTtcCreditsSpline);
-        SET_CREDITS_SPLINE(AREA_RR, sRrCreditsSpline);
-        SET_CREDITS_SPLINE(AREA_SA, sSaCreditsSpline);
-        SET_CREDITS_SPLINE(AREA_COTMC, sCotmcCreditsSpline);
-        SET_CREDITS_SPLINE(AREA_DDD_SUB, sDddSubCreditsSpline);
+        case AREA_BOB:
+            pos = sBobCreditsSplinePositions;
+            focus = sBobCreditsSplineFocus;
+            break;
+        case AREA_WF:
+            pos = sWfCreditsSplinePositions;
+            focus = sWfCreditsSplineFocus;
+            break;
+        case AREA_JRB_MAIN:
+            pos = sJrbCreditsSplinePositions;
+            focus = sJrbCreditsSplineFocus;
+            break;
+        case AREA_CCM_SLIDE:
+            pos = sCcmSlideCreditsSplinePositions;
+            focus = sCcmSlideCreditsSplineFocus;
+            break;
+        case AREA_BBH:
+            pos = sBbhCreditsSplinePositions;
+            focus = sBbhCreditsSplineFocus;
+            break;
+        case AREA_HMC:
+            pos = sHmcCreditsSplinePositions;
+            focus = sHmcCreditsSplineFocus;
+            break;
+        case AREA_THI_WIGGLER:
+            pos = sThiWigglerCreditsSplinePositions;
+            focus = sThiWigglerCreditsSplineFocus;
+            break;
+        case AREA_LLL_VOLCANO:
+            pos = sVolcanoCreditsSplinePositions;
+            focus = sVolcanoCreditsSplineFocus;
+            break;
+        case AREA_SSL_OUTSIDE:
+            pos = sSslCreditsSplinePositions;
+            focus = sSslCreditsSplineFocus;
+            break;
+        case AREA_DDD_WHIRLPOOL:
+            pos = sDddCreditsSplinePositions;
+            focus = sDddCreditsSplineFocus;
+            break;
+        case AREA_SL_OUTSIDE:
+            pos = sSlCreditsSplinePositions;
+            focus = sSlCreditsSplineFocus;
+            break;
+        case AREA_WDW_MAIN:
+            pos = sWdwCreditsSplinePositions;
+            focus = sWdwCreditsSplineFocus;
+            break;
+        case AREA_TTM_OUTSIDE:
+            pos = sTtmCreditsSplinePositions;
+            focus = sTtmCreditsSplineFocus;
+            break;
+        case AREA_THI_HUGE:
+            pos = sThiHugeCreditsSplinePositions;
+            focus = sThiHugeCreditsSplineFocus;
+            break;
+        case AREA_TTC:
+            pos = sTtcCreditsSplinePositions;
+            focus = sTtcCreditsSplineFocus;
+            break;
+        case AREA_RR:
+            pos = sRrCreditsSplinePositions;
+            focus = sRrCreditsSplineFocus;
+            break;
+        case AREA_SA:
+            pos = sSaCreditsSplinePositions;
+            focus = sSaCreditsSplineFocus;
+            break;
+        case AREA_COTMC:
+            pos = sCotmcCreditsSplinePositions;
+            focus = sCotmcCreditsSplineFocus;
+            break;
+        case AREA_DDD_SUB:
+            pos = sDddSubCreditsSplinePositions;
+            focus = sDddSubCreditsSplineFocus;
+            break;
         case AREA_CCM_OUTSIDE:
             //! Checks if the "Snowman's Lost His Head" star was collected. The credits likely would
             //! have avoided the snowman if the player didn't collect that star, but in the end the
@@ -9734,7 +9871,6 @@ CmdRet cutscene_credits(struct Camera *c) {
             pos = sCcmOutsideCreditsSplinePositions;
             focus = sCcmOutsideCreditsSplineFocus;
     }
-#undef SET_CREDITS_SPLINE
 
     copy_spline_segment(sCurCreditsSplinePos, pos);
     copy_spline_segment(sCurCreditsSplineFocus, focus);
@@ -9744,9 +9880,9 @@ CmdRet cutscene_credits(struct Camera *c) {
 }
 
 /**
- * Set the camera pos relative to mario.
+ * Set the camera pos relative to Mario.
  */
-CmdRet cutscene_sliding_doors_open_start(struct Camera *c) {
+BAD_RETURN(s32) cutscene_sliding_doors_open_start(struct Camera *c) {
     f32 dist;
     s16 pitch, yaw;
 
@@ -9763,44 +9899,44 @@ CmdRet cutscene_sliding_doors_open_start(struct Camera *c) {
 }
 
 /**
- * cvar1: mario's position
- * cvar0.angle: mario's angle
- * cvar0.point: offset from mario
+ * cvar1: Mario's position
+ * cvar0.angle: Mario's angle
+ * cvar0.point: offset from Mario
  */
-CmdRet cutscene_sliding_doors_open_set_cvars(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_sliding_doors_open_set_cvars(UNUSED struct Camera *c) {
     vec3f_copy(sCutsceneVars[1].point, sMarioCamState->pos);
     vec3s_copy(sCutsceneVars[0].angle, sMarioCamState->faceAngle);
     vec3f_set(sCutsceneVars[0].point, 80.f, 325.f, 200.f);
 }
 
 /**
- * Decrease the cvar0 y offset to 75, which would simulate lakitu flying under the doorway.
- * However, the initial y offset is too high for lakitu to reach 75 in time.
+ * Decrease the cvar0 y offset to 75, which would simulate Lakitu flying under the doorway.
+ * However, the initial y offset is too high for Lakitu to reach 75 in time.
  */
-CmdRet cutscene_sliding_doors_go_under_doorway(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_sliding_doors_go_under_doorway(UNUSED struct Camera *c) {
     camera_approach_f32_symmetric_bool(&sCutsceneVars[0].point[1], 75.f, 10.f);
 }
 
 /**
  * Approach a y offset of 125 again.
  */
-CmdRet cutscene_sliding_doors_fly_back_up(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_sliding_doors_fly_back_up(UNUSED struct Camera *c) {
     camera_approach_f32_symmetric_bool(&sCutsceneVars[0].point[1], 125.f, 10.f);
 }
 
 /**
- * Follow mario through the door, by approaching cvar1.point.
+ * Follow Mario through the door, by approaching cvar1.point.
  */
-CmdRet cutscene_sliding_doors_follow_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_sliding_doors_follow_mario(struct Camera *c) {
     Vec3f pos;
-    UNUSED u32 pad[4];
+    UNUSED u32 pad[5];
 
     vec3f_copy(pos, c->pos);
-    // Update cvar1 with mario's position (the y value doesn't change)
+    // Update cvar1 with Mario's position (the y value doesn't change)
     sCutsceneVars[1].point[0] = sMarioCamState->pos[0];
     sCutsceneVars[1].point[2] = sMarioCamState->pos[2];
 
-    // Decrease cvar0's offsets, moving the camera behind mario at his eye height.
+    // Decrease cvar0's offsets, moving the camera behind Mario at his eye height.
     approach_f32_asymptotic_bool(&sCutsceneVars[0].point[0], 0, 0.1f);
     camera_approach_f32_symmetric_bool(&sCutsceneVars[0].point[2], 125.f, 50.f);
     // Update cvar0's angle
@@ -9810,15 +9946,15 @@ CmdRet cutscene_sliding_doors_follow_mario(struct Camera *c) {
     offset_rotated(pos, sCutsceneVars[1].point, sCutsceneVars[0].point, sCutsceneVars[0].angle);
     approach_vec3f_asymptotic(c->pos, pos, 0.15f, 0.05f, 0.15f);
 
-    // Focus on mario's eye height
+    // Focus on Mario's eye height
     set_focus_rel_mario(c, 0, 125.f, 0, 0);
 }
 
 /**
- * Plays when mario opens the sliding doors.
- * Note: the star door unlocking event is not a cutscene, it's handled by mario separately.
+ * Plays when Mario opens the sliding doors.
+ * Note: the star door unlocking event is not a cutscene, it's handled by Mario separately.
  */
-CmdRet cutscene_sliding_doors_open(struct Camera *c) {
+BAD_RETURN(s32) cutscene_sliding_doors_open(struct Camera *c) {
     UNUSED u32 pad[2];
 
     reset_pan_distance(c);
@@ -9832,20 +9968,20 @@ CmdRet cutscene_sliding_doors_open(struct Camera *c) {
 /**
  * Ends the double door cutscene.
  */
-CmdRet cutscene_double_doors_end(struct Camera *c) {
+BAD_RETURN(s32) cutscene_double_doors_end(struct Camera *c) {
     set_flag_post_door(c);
     c->cutscene = 0;
     sStatusFlags |= CAM_FLAG_SMOOTH_MOVEMENT;
 }
 
-CmdRet cutscene_enter_painting_stub(UNUSED struct Camera *c) {
+BAD_RETURN(s32) cutscene_enter_painting_stub(UNUSED struct Camera *c) {
 }
 
 /**
- * Plays when mario enters a painting. The camera flies up to the painting's center, then it slowly
+ * Plays when Mario enters a painting. The camera flies up to the painting's center, then it slowly
  * zooms in until the star select screen appears.
  */
-CmdRet cutscene_enter_painting(struct Camera *c) {
+BAD_RETURN(s32) cutscene_enter_painting(struct Camera *c) {
     struct Surface *floor, *highFloor;
     Vec3f paintingPos, focus, focusOffset;
     Vec3s paintingAngle;
@@ -9856,22 +9992,22 @@ CmdRet cutscene_enter_painting(struct Camera *c) {
     set_fov_function(CAM_FOV_APP_20);
     sStatusFlags |= CAM_FLAG_SMOOTH_MOVEMENT;
 
-    if (ripplingPainting != NULL) {
+    if (gRipplingPainting != NULL) {
         paintingAngle[0] = 0;
-        paintingAngle[1] = (s32)((ripplingPainting->vYRotation / 360.f) * 65536.f); // convert degrees to IAU
+        paintingAngle[1] = (s32)((gRipplingPainting->yaw / 360.f) * 65536.f); // convert degrees to IAU
         paintingAngle[2] = 0;
 
-        focusOffset[0] = ripplingPainting->vSize / 2.0f;
+        focusOffset[0] = gRipplingPainting->size / 2;
         focusOffset[1] = focusOffset[0];
         focusOffset[2] = 0;
 
-        paintingPos[0] = ripplingPainting->vXPos;
-        paintingPos[1] = ripplingPainting->vYPos;
-        paintingPos[2] = ripplingPainting->vZPos;
+        paintingPos[0] = gRipplingPainting->posX;
+        paintingPos[1] = gRipplingPainting->posY;
+        paintingPos[2] = gRipplingPainting->posZ;
 
         offset_rotated(focus, paintingPos, focusOffset, paintingAngle);
         approach_vec3f_asymptotic(c->focus, focus, 0.1f, 0.1f, 0.1f);
-        focusOffset[2] = -(((ripplingPainting->vSize * 1000.f) / 2.0f) / 307.f);
+        focusOffset[2] = -(((gRipplingPainting->size * 1000.f) / 2) / 307.f);
         offset_rotated(focus, paintingPos, focusOffset, paintingAngle);
         floorHeight = find_floor(focus[0], focus[1] + 500.f, focus[2], &highFloor) + 125.f;
 
@@ -9897,15 +10033,15 @@ CmdRet cutscene_enter_painting(struct Camera *c) {
 }
 
 /**
- * Warp the camera to mario, then use his faceAngle to calculate the right relative position.
+ * Warp the camera to Mario, then use his faceAngle to calculate the right relative position.
  *
- * cvar0.point is mario's position
- * cvar0.angle is mario's faceAngle
+ * cvar0.point is Mario's position
+ * cvar0.angle is Mario's faceAngle
  *
- * cvar1 is the camera's position relative to mario
- * cvar2 is the camera's focus relative to mario
+ * cvar1 is the camera's position relative to Mario
+ * cvar2 is the camera's focus relative to Mario
  */
-CmdRet cutscene_exit_painting_start(struct Camera *c) {
+BAD_RETURN(s32) cutscene_exit_painting_start(struct Camera *c) {
     struct Surface *floor;
     f32 floorHeight;
 
@@ -9932,16 +10068,16 @@ CmdRet cutscene_exit_painting_start(struct Camera *c) {
 }
 
 /**
- * Decrease cvar2's x and z offset, moving closer to mario.
+ * Decrease cvar2's x and z offset, moving closer to Mario.
  */
-CmdRet cutscene_exit_painting_move_to_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_exit_painting_move_to_mario(struct Camera *c) {
     Vec3f pos;
 
     //! Tricky math: Since offset_rotated() flips Z offsets, you'd expect a positive Z offset to move
-    //! the camera into the wall. However, mario's faceAngle always points into the painting, so a
-    //! positive Z offset moves the camera "behind" mario, away from the painting.
+    //! the camera into the wall. However, Mario's faceAngle always points into the painting, so a
+    //! positive Z offset moves the camera "behind" Mario, away from the painting.
     //!
-    //! In the success cutscene, when mario jumps out face-first, only his gfx angle is updated. His
+    //! In the success cutscene, when Mario jumps out face-first, only his gfx angle is updated. His
     //! actual face angle isn't updated until after the cutscene.
     approach_f32_asymptotic_bool(&sCutsceneVars[2].point[0], 178.f, 0.05f);
     approach_f32_asymptotic_bool(&sCutsceneVars[2].point[2], 889.f, 0.05f);
@@ -9951,9 +10087,9 @@ CmdRet cutscene_exit_painting_move_to_mario(struct Camera *c) {
 }
 
 /**
- * Move the camera down to the floor mario lands on.
+ * Move the camera down to the floor Mario lands on.
  */
-CmdRet cutscene_exit_painting_move_to_floor(struct Camera *c) {
+BAD_RETURN(s32) cutscene_exit_painting_move_to_floor(struct Camera *c) {
     struct Surface *floor;
     Vec3f floorHeight;
 
@@ -9971,9 +10107,9 @@ CmdRet cutscene_exit_painting_move_to_floor(struct Camera *c) {
 }
 
 /**
- * Cutscene played when mario leaves a painting, either due to death or collecting a star.
+ * Cutscene played when Mario leaves a painting, either due to death or collecting a star.
  */
-CmdRet cutscene_exit_painting(struct Camera *c) {
+BAD_RETURN(s32) cutscene_exit_painting(struct Camera *c) {
     cutscene_event(cutscene_exit_painting_start, c, 0, 0);
     cutscene_event(cutscene_exit_painting_move_to_mario, c, 5, -1);
     cutscene_event(cutscene_exit_painting_move_to_floor, c, 5, -1);
@@ -9987,9 +10123,9 @@ CmdRet cutscene_exit_painting(struct Camera *c) {
 }
 
 /**
- * Unused. Warp the camera to mario.
+ * Unused. Warp the camera to Mario.
  */
-CmdRet cutscene_unused_exit_start(struct Camera *c) {
+BAD_RETURN(s32) cutscene_unused_exit_start(struct Camera *c) {
     UNUSED Vec3f unused1;
     UNUSED Vec3s unused2;
     Vec3f offset;
@@ -10002,9 +10138,9 @@ CmdRet cutscene_unused_exit_start(struct Camera *c) {
 }
 
 /**
- * Unused. Focus on mario as he exits.
+ * Unused. Focus on Mario as he exits.
  */
-CmdRet cutscene_unused_exit_focus_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_unused_exit_focus_mario(struct Camera *c) {
     Vec3f focus;
 
     vec3f_set(focus, sMarioCamState->pos[0], sMarioCamState->pos[1] + 125.f, sMarioCamState->pos[2]);
@@ -10016,7 +10152,7 @@ CmdRet cutscene_unused_exit_focus_mario(struct Camera *c) {
 /**
  * Give control back to the player.
  */
-CmdRet cutscene_exit_painting_end(struct Camera *c) {
+BAD_RETURN(s32) cutscene_exit_painting_end(struct Camera *c) {
     c->mode = CAMERA_MODE_CLOSE;
     c->cutscene = 0;
     gCutsceneTimer = CUTSCENE_STOP;
@@ -10028,7 +10164,7 @@ CmdRet cutscene_exit_painting_end(struct Camera *c) {
 /**
  * End the cutscene, starting cannon mode.
  */
-CmdRet cutscene_enter_cannon_end(struct Camera *c) {
+BAD_RETURN(s32) cutscene_enter_cannon_end(struct Camera *c) {
     sStatusFlags &= ~CAM_FLAG_SMOOTH_MOVEMENT;
     sStatusFlags |= CAM_FLAG_BLOCK_SMOOTH_MOVEMENT;
     c->mode = CAMERA_MODE_INSIDE_CANNON;
@@ -10039,7 +10175,7 @@ CmdRet cutscene_enter_cannon_end(struct Camera *c) {
 /**
  * Rotate around the cannon as it rises out of the hole.
  */
-CmdRet cutscene_enter_cannon_raise(struct Camera *c) {
+BAD_RETURN(s32) cutscene_enter_cannon_raise(struct Camera *c) {
     struct Object *o;
     UNUSED u32 pad[2];
     f32 floorHeight;
@@ -10084,7 +10220,7 @@ CmdRet cutscene_enter_cannon_raise(struct Camera *c) {
 /**
  * Start the cannon entering cutscene
  */
-CmdRet cutscene_enter_cannon_start(struct Camera *c) {
+BAD_RETURN(s32) cutscene_enter_cannon_start(struct Camera *c) {
     UNUSED u32 cvar3Start;
     UNUSED u32 cvar4Start;
     struct Object *o;
@@ -10113,7 +10249,7 @@ CmdRet cutscene_enter_cannon_start(struct Camera *c) {
 /**
  * Store the camera's pos and focus for the door cutscene
  */
-CmdRet cutscene_door_start(struct Camera *c) {
+BAD_RETURN(s32) cutscene_door_start(struct Camera *c) {
     vec3f_copy(sCutsceneVars[0].point, c->pos);
     vec3f_copy(sCutsceneVars[1].point, c->focus);
 }
@@ -10121,15 +10257,15 @@ CmdRet cutscene_door_start(struct Camera *c) {
 /**
  * Fix the camera in place while the door opens.
  */
-CmdRet cutscene_door_fix_cam(struct Camera *c) {
+BAD_RETURN(s32) cutscene_door_fix_cam(struct Camera *c) {
     vec3f_copy(c->pos, sCutsceneVars[0].point);
     vec3f_copy(c->focus, sCutsceneVars[1].point);
 }
 
 /**
- * Loop until mario is no longer using the door.
+ * Loop until Mario is no longer using the door.
  */
-CmdRet cutscene_door_loop(struct Camera *c) {
+BAD_RETURN(s32) cutscene_door_loop(struct Camera *c) {
     //! bitwise AND instead of boolean
     if ((sMarioCamState->action != ACT_PULLING_DOOR) & (sMarioCamState->action != ACT_PUSHING_DOOR)) {
         gCutsceneTimer = CUTSCENE_STOP;
@@ -10138,9 +10274,9 @@ CmdRet cutscene_door_loop(struct Camera *c) {
 }
 
 /**
- * Warp the camera behind mario.
+ * Warp the camera behind Mario.
  */
-CmdRet cutscene_door_move_behind_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_door_move_behind_mario(struct Camera *c) {
     Vec3f camOffset;
     s16 doorRotation;
 
@@ -10160,9 +10296,9 @@ CmdRet cutscene_door_move_behind_mario(struct Camera *c) {
 }
 
 /**
- * Follow mario through the door.
+ * Follow Mario through the door.
  */
-CmdRet cutscene_door_follow_mario(struct Camera *c) {
+BAD_RETURN(s32) cutscene_door_follow_mario(struct Camera *c) {
     s16 pitch, yaw;
     f32 dist;
 
@@ -10176,7 +10312,7 @@ CmdRet cutscene_door_follow_mario(struct Camera *c) {
 /**
  * Ends the door cutscene. Sets the camera mode to close mode unless the default is free roam.
  */
-CmdRet cutscene_door_end(struct Camera *c) {
+BAD_RETURN(s32) cutscene_door_end(struct Camera *c) {
     if (c->defMode == CAMERA_MODE_FREE_ROAM) {
         c->mode = CAMERA_MODE_FREE_ROAM;
     } else {
@@ -10194,7 +10330,7 @@ CmdRet cutscene_door_end(struct Camera *c) {
 /**
  * Used for entering a room that uses a specific camera mode, like the castle lobby or BBH
  */
-CmdRet cutscene_door_mode(struct Camera *c) {
+BAD_RETURN(s32) cutscene_door_mode(struct Camera *c) {
     UNUSED u32 pad[2];
 
     reset_pan_distance(c);
@@ -10209,7 +10345,7 @@ CmdRet cutscene_door_mode(struct Camera *c) {
 
     c->yaw = c->nextYaw;
 
-    // Loop until mario is no longer using the door
+    // Loop until Mario is no longer using the door
     if (sMarioCamState->action != ACT_ENTERING_STAR_DOOR &&
         sMarioCamState->action != ACT_PULLING_DOOR &&
         sMarioCamState->action != ACT_PUSHING_DOOR) {
@@ -10223,11 +10359,21 @@ CmdRet cutscene_door_mode(struct Camera *c) {
  ******************************************************************************************************/
 
 /**
- * Cutscene that plays when mario beats the game.
+ * Cutscene that plays when Mario beats the game.
  */
 struct Cutscene sCutsceneEnding[] = {
     { cutscene_ending_mario_fall, 170 },
     { cutscene_ending_mario_land, 70 },
+#ifdef VERSION_EU
+    { cutscene_ending_mario_land_closeup, 0x44 },
+    { cutscene_ending_stars_free_peach,  0x15c },
+    { cutscene_ending_peach_appears, 0x6d  },
+    { cutscene_ending_peach_descends, 0x212 },
+    { cutscene_ending_mario_to_peach, 0x69 },
+    { cutscene_ending_peach_wakeup, 0x1a4 },
+    { cutscene_ending_dialog, 0x114 },
+    { cutscene_ending_kiss, 0x10b },
+#else
     { cutscene_ending_mario_land_closeup, 75 },
     { cutscene_ending_stars_free_peach, 386 },
     { cutscene_ending_peach_appears, 139 },
@@ -10236,12 +10382,13 @@ struct Cutscene sCutsceneEnding[] = {
     { cutscene_ending_peach_wakeup, 425 },
     { cutscene_ending_dialog, 236 },
     { cutscene_ending_kiss, 245 },
+#endif
     { cutscene_ending_cake_for_mario, CUTSCENE_LOOP },
     { cutscene_ending_stop, 0 }
 };
 
 /**
- * Cutscene that plays when mario collects the grand star from bowser.
+ * Cutscene that plays when Mario collects the grand star from bowser.
  */
 struct Cutscene sCutsceneGrandStar[] = {
     { cutscene_grand_star, 360 },
@@ -10254,7 +10401,7 @@ struct Cutscene sCutsceneUnused[] = {
 };
 
 /**
- * Cutscene that plays when mario enters a door that warps to another area.
+ * Cutscene that plays when Mario enters a door that warps to another area.
  */
 struct Cutscene sCutsceneDoorWarp[] = {
     { cutscene_door_start, 1 },
@@ -10262,7 +10409,7 @@ struct Cutscene sCutsceneDoorWarp[] = {
 };
 
 /**
- * Cutscene that plays after the credits, when lakitu is flying away from the castle.
+ * Cutscene that plays after the credits, when Lakitu is flying away from the castle.
  */
 struct Cutscene sCutsceneEndWaving[] = {
     { cutscene_end_waving, CUTSCENE_LOOP }
@@ -10276,7 +10423,7 @@ struct Cutscene sCutsceneCredits[] = {
 };
 
 /**
- * Cutscene that plays when mario pulls open a door.
+ * Cutscene that plays when Mario pulls open a door.
  */
 struct Cutscene sCutsceneDoorPull[] = {
     { cutscene_door_start, 1 },
@@ -10287,7 +10434,7 @@ struct Cutscene sCutsceneDoorPull[] = {
 };
 
 /**
- * Cutscene that plays when mario pushes open a door.
+ * Cutscene that plays when Mario pushes open a door.
  */
 struct Cutscene sCutsceneDoorPush[] = {
     { cutscene_door_start, 1 },
@@ -10298,7 +10445,7 @@ struct Cutscene sCutsceneDoorPush[] = {
 };
 
 /**
- * Cutscene that plays when mario pulls open a door that has some special mode requirement on the other
+ * Cutscene that plays when Mario pulls open a door that has some special mode requirement on the other
  * side.
  */
 struct Cutscene sCutsceneDoorPullMode[] = {
@@ -10308,7 +10455,7 @@ struct Cutscene sCutsceneDoorPullMode[] = {
 };
 
 /**
- * Cutscene that plays when mario pushes open a door that has some special mode requirement on the other
+ * Cutscene that plays when Mario pushes open a door that has some special mode requirement on the other
  * side.
  */
 struct Cutscene sCutsceneDoorPushMode[] = {
@@ -10318,7 +10465,7 @@ struct Cutscene sCutsceneDoorPushMode[] = {
 };
 
 /**
- * Cutscene that plays when mario enters the cannon and it rises out of the hole.
+ * Cutscene that plays when Mario enters the cannon and it rises out of the hole.
  */
 struct Cutscene sCutsceneEnterCannon[] = {
     { cutscene_enter_cannon_start, 1 },
@@ -10345,14 +10492,14 @@ struct Cutscene sCutsceneRedCoinStarSpawn[] = {
 };
 
 /**
- * Cutscene that plays when mario enters a course painting.
+ * Cutscene that plays when Mario enters a course painting.
  */
 struct Cutscene sCutsceneEnterPainting[] = {
     { cutscene_enter_painting, CUTSCENE_LOOP }
 };
 
 /**
- * Cutscene that plays when mario dies and warps back to the castle.
+ * Cutscene that plays when Mario dies and warps back to the castle.
  */
 struct Cutscene sCutsceneDeathExit[] = {
     { cutscene_exit_painting, 118 },
@@ -10360,7 +10507,7 @@ struct Cutscene sCutsceneDeathExit[] = {
 };
 
 /**
- * Cutscene that plays when mario warps to the castle after collecting a star.
+ * Cutscene that plays when Mario warps to the castle after collecting a star.
  */
 struct Cutscene sCutsceneExitPaintingSuccess[] = {
     { cutscene_exit_painting, 180 },
@@ -10374,12 +10521,16 @@ struct Cutscene sCutsceneUnusedExit[] = {
 };
 
 /**
- * The intro of the game. Peach reads her letter and lakitu flies down to mario's warp pipe.
+ * The intro of the game. Peach reads her letter and Lakitu flies down to Mario's warp pipe.
  */
 struct Cutscene sCutsceneIntroPeach[] = {
     { cutscene_intro_peach_letter, CUTSCENE_LOOP },
     { cutscene_intro_peach_reset_fov, 35 },
+#ifdef VERSION_EU
+    { cutscene_intro_peach_fly_to_pipe, 675 },
+#else
     { cutscene_intro_peach_fly_to_pipe, 820 },
+#endif
     { cutscene_intro_peach_mario_appears, 270 },
     { cutscene_intro_peach_dialog, CUTSCENE_LOOP }
 };
@@ -10393,7 +10544,7 @@ struct Cutscene sCutscenePrepareCannon[] = {
 };
 
 /**
- * Cutscene that plays when mario enters the castle grounds after leaving CotMC through the waterfall.
+ * Cutscene that plays when Mario enters the castle grounds after leaving CotMC through the waterfall.
  */
 struct Cutscene sCutsceneExitWaterfall[] = {
     { cutscene_exit_waterfall, 52 },
@@ -10401,7 +10552,7 @@ struct Cutscene sCutsceneExitWaterfall[] = {
 };
 
 /**
- * Cutscene that plays when mario falls from WMOTR.
+ * Cutscene that plays when Mario falls from WMOTR.
  */
 struct Cutscene sCutsceneFallToCastleGrounds[] = {
     { cutscene_exit_fall_to_castle_grounds, 73 },
@@ -10409,7 +10560,7 @@ struct Cutscene sCutsceneFallToCastleGrounds[] = {
 };
 
 /**
- * Cutscene that plays when mario enters the pyramid through the hole at the top.
+ * Cutscene that plays when Mario enters the pyramid through the hole at the top.
  */
 struct Cutscene sCutsceneEnterPyramidTop[] = {
     { cutscene_enter_pyramid_top, 90 },
@@ -10426,14 +10577,14 @@ struct Cutscene sCutscenePyramidTopExplode[] = {
 };
 
 /**
- * Cutscene that plays when mario dies while standing, or from electrocution.
+ * Cutscene that plays when Mario dies while standing, or from electrocution.
  */
 struct Cutscene sCutsceneStandingDeath[] = {
     { cutscene_death_standing, CUTSCENE_LOOP }
 };
 
 /**
- * Cutscene that plays when mario enters HMC or CotMC.
+ * Cutscene that plays when Mario enters HMC or CotMC.
  */
 struct Cutscene sCutsceneEnterPool[] = {
     { cutscene_enter_pool, 100 },
@@ -10441,35 +10592,35 @@ struct Cutscene sCutsceneEnterPool[] = {
 };
 
 /**
- * Cutscene that plays when mario dies on his stomach.
+ * Cutscene that plays when Mario dies on his stomach.
  */
 struct Cutscene sCutsceneDeathStomach[] = {
     { cutscene_death_stomach, CUTSCENE_LOOP }
 };
 
 /**
- * Cutscene that plays when mario dies on his back.
+ * Cutscene that plays when Mario dies on his back.
  */
 struct Cutscene sCutsceneDeathOnBack[] = {
     { cutscene_bbh_death, CUTSCENE_LOOP }
 };
 
 /**
- * Cutscene that plays when mario dies in quicksand.
+ * Cutscene that plays when Mario dies in quicksand.
  */
 struct Cutscene sCutsceneQuicksandDeath[] = {
     { cutscene_quicksand_death, CUTSCENE_LOOP },
 };
 
 /**
- * Unused cutscene for ACT_WATER_DEATH, which happens when mario gets hit by an enemy under water.
+ * Unused cutscene for ACT_WATER_DEATH, which happens when Mario gets hit by an enemy under water.
  */
 struct Cutscene sCutsceneWaterDeath[] = {
     { cutscene_quicksand_death, CUTSCENE_LOOP }
 };
 
 /**
- * Cutscene that plays when mario suffocates.
+ * Cutscene that plays when Mario suffocates.
  */
 struct Cutscene sCutsceneSuffocation[] = {
     { cutscene_suffocation, CUTSCENE_LOOP }
@@ -10484,12 +10635,12 @@ struct Cutscene sCutsceneEnterBowserArena[] = {
     { cutscene_bowser_arena_end, 0 }
 };
 
-// The dance cutscenes are automatically stopped since reset_camera() is called after mario warps.
+// The dance cutscenes are automatically stopped since reset_camera() is called after Mario warps.
 
 /**
  * Star dance cutscene.
- * For the default dance, the camera moves closer to mario, then stays in place.
- * For the rotate dance, the camera moves closer and rotates clockwise around mario.
+ * For the default dance, the camera moves closer to Mario, then stays in place.
+ * For the rotate dance, the camera moves closer and rotates clockwise around Mario.
  */
 struct Cutscene sCutsceneDanceDefaultRotate[] = {
     { cutscene_dance_default_rotate, CUTSCENE_LOOP }
@@ -10497,7 +10648,7 @@ struct Cutscene sCutsceneDanceDefaultRotate[] = {
 
 /**
  * Star dance cutscene.
- * The camera moves closer and rotates clockwise around mario.
+ * The camera moves closer and rotates clockwise around Mario.
  */
 struct Cutscene sCutsceneDanceFlyAway[] = {
     { cutscene_dance_fly_away, CUTSCENE_LOOP }
@@ -10505,7 +10656,7 @@ struct Cutscene sCutsceneDanceFlyAway[] = {
 
 /**
  * Star dance cutscene.
- * The camera moves in for a closeup on mario. Used in tight spaces and underwater.
+ * The camera moves in for a closeup on Mario. Used in tight spaces and underwater.
  */
 struct Cutscene sCutsceneDanceCloseup[] = {
     { cutscene_dance_closeup, CUTSCENE_LOOP }
@@ -10513,21 +10664,21 @@ struct Cutscene sCutsceneDanceCloseup[] = {
 
 /**
  * Star dance cutscene.
- * The camera moves closer and rotates clockwise around mario.
+ * The camera moves closer and rotates clockwise around Mario.
  */
 struct Cutscene sCutsceneKeyDance[] = {
     { cutscene_key_dance, CUTSCENE_LOOP }
 };
 
 /**
- * Cutscene that plays when mario presses a cap switch.
+ * Cutscene that plays when Mario presses a cap switch.
  */
 struct Cutscene sCutsceneCapSwitchPress[] = {
     { cutscene_cap_switch_press, CUTSCENE_LOOP }
 };
 
 /**
- * Cutscene that plays when mario opens a sliding star door.
+ * Cutscene that plays when Mario opens a sliding star door.
  */
 struct Cutscene sCutsceneSlidingDoorsOpen[] = {
     { cutscene_sliding_doors_open, 50 },
@@ -10535,7 +10686,7 @@ struct Cutscene sCutsceneSlidingDoorsOpen[] = {
 };
 
 /**
- * Cutscene that plays when mario unlocks the basement or upstairs key door.
+ * Cutscene that plays when Mario unlocks the basement or upstairs key door.
  */
 struct Cutscene sCutsceneUnlockKeyDoor[] = {
     { cutscene_unlock_key_door, 200 },
@@ -10543,7 +10694,7 @@ struct Cutscene sCutsceneUnlockKeyDoor[] = {
 };
 
 /**
- * Cutscene that plays when mario exits bowser's arena after getting the key.
+ * Cutscene that plays when Mario exits bowser's arena after getting the key.
  */
 struct Cutscene sCutsceneExitBowserSuccess[] = {
     { cutscene_exit_bowser_succ, 190 },
@@ -10551,7 +10702,7 @@ struct Cutscene sCutsceneExitBowserSuccess[] = {
 };
 
 /**
- * Unused cutscene for when mario dies in bowser's arena. Instead, mario just respawns at the warp pipe.
+ * Unused cutscene for when Mario dies in bowser's arena. Instead, Mario just respawns at the warp pipe.
  */
 struct Cutscene sCutsceneExitBowserDeath[] = {
     { cutscene_exit_bowser_death, 120 },
@@ -10559,7 +10710,7 @@ struct Cutscene sCutsceneExitBowserDeath[] = {
 };
 
 /**
- * Cutscene that plays when mario exits a non-painting course, like HMC.
+ * Cutscene that plays when Mario exits a non-painting course, like HMC.
  */
 struct Cutscene sCutsceneExitSpecialSuccess[] = {
     { cutscene_exit_non_painting_succ, 163 },
@@ -10567,7 +10718,7 @@ struct Cutscene sCutsceneExitSpecialSuccess[] = {
 };
 
 /**
- * Cutscene that plays when mario exits from dying in a non-painting course, like HMC.
+ * Cutscene that plays when Mario exits from dying in a non-painting course, like HMC.
  */
 struct Cutscene sCutsceneNonPaintingDeath[] = {
     { cutscene_non_painting_death, 120 },
@@ -10575,7 +10726,7 @@ struct Cutscene sCutsceneNonPaintingDeath[] = {
 };
 
 /**
- * Cutscene that plays when mario talks to a creature.
+ * Cutscene that plays when Mario talks to a creature.
  */
 struct Cutscene sCutsceneDialog[] = {
     { cutscene_dialog, CUTSCENE_LOOP },
@@ -10584,7 +10735,7 @@ struct Cutscene sCutsceneDialog[] = {
 };
 
 /**
- * Cutscene that plays when mario reads a sign or message.
+ * Cutscene that plays when Mario reads a sign or message.
  */
 struct Cutscene sCutsceneReadMessage[] = {
     { cutscene_read_message, CUTSCENE_LOOP },
@@ -10615,7 +10766,7 @@ struct Cutscene sCutsceneReadMessage[] = {
  *
  * 0: Lakitu flies away after the dance
  * 1: Only rotates the camera, doesn't zoom out
- * 2: The camera goes to a close up of mario
+ * 2: The camera goes to a close up of Mario
  * 3: Bowser keys and the grand star
  * 4: Default, used for 100 coin stars, 8 red coin stars in bowser levels, and secret stars
  */
@@ -11105,7 +11256,7 @@ s32 cutscene_event(CameraEvent event, struct Camera *c, s16 start, s16 end) {
  *
  * @see intro_scene.inc.c for details on which objects are spawned.
  */
-s32 cutscene_spawn_obj(s32 obj, s16 frame) {
+s32 cutscene_spawn_obj(u32 obj, s16 frame) {
     if (frame == gCutsceneTimer) {
         gCutsceneObjSpawn = obj;
     }
@@ -11183,7 +11334,7 @@ void zoom_fov_30(UNUSED struct MarioState *m) {
 
 /**
  * This is the default fov function. It makes fov approach 45 degrees, and it handles zooming in when
- * mario falls a sleep.
+ * Mario falls a sleep.
  */
 void fov_default(struct MarioState *m) {
     sStatusFlags &= ~CAM_FLAG_SLEEPING;
@@ -11347,7 +11498,7 @@ void set_fov_shake_from_point_preset(u8 preset, f32 posX, f32 posY, f32 posZ) {
  * Offset an object's position in a random direction within the given bounds.
  */
 static UNUSED void unused_displace_obj_randomly(struct Object *o, f32 xRange, f32 yRange, f32 zRange) {
-    f32 rnd = RandomFloat();
+    f32 rnd = random_float();
 
     o->oPosX += (rnd * xRange - xRange / 2.f);
     o->oPosY += (rnd * yRange - yRange / 2.f);
@@ -11358,7 +11509,7 @@ static UNUSED void unused_displace_obj_randomly(struct Object *o, f32 xRange, f3
  * Rotate an object in a random direction within the given bounds.
  */
 static UNUSED void unused_rotate_obj_randomly(struct Object *o, f32 pitchRange, f32 yawRange) {
-    f32 rnd = RandomFloat();
+    f32 rnd = random_float();
 
     o->oMoveAnglePitch += (s16)(rnd * pitchRange - pitchRange / 2.f);
     o->oMoveAngleYaw += (s16)(rnd * yawRange - yawRange / 2.f);

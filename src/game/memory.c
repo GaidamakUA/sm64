@@ -1,18 +1,16 @@
-#include <ultra64.h>
+#include <PR/ultratypes.h>
 
 #include "sm64.h"
 
 #define INCLUDED_FROM_MEMORY_C
 
+#include "buffers/buffers.h"
 #include "decompress.h"
-#include "game.h"
+#include "game_init.h"
 #include "main.h"
-#include "segments.h"
 #include "memory.h"
-
-extern u8 _engineSegmentRomStart[];
-extern u8 _engineSegmentRomEnd[];
-extern u8 gDecompressionHeap[];
+#include "segment_symbols.h"
+#include "segments.h"
 
 // round up to the next multiple
 #define ALIGN4(val) (((val) + 0x3) & ~0x3)
@@ -42,19 +40,27 @@ struct MemoryBlock {
     u32 size;
 };
 
-static uintptr_t sSegmentTable[32];
+extern uintptr_t sSegmentTable[32];
+extern u32 sPoolFreeSpace;
+extern u8 *sPoolStart;
+extern u8 *sPoolEnd;
+extern struct MainPoolBlock *sPoolListHeadL;
+extern struct MainPoolBlock *sPoolListHeadR;
 
-static u32 sPoolFreeSpace;
-static u8 *sPoolStart;
-static u8 *sPoolEnd;
-static struct MainPoolBlock *sPoolListHeadL;
-static struct MainPoolBlock *sPoolListHeadR;
 
 /**
  * Memory pool for small graphical effects that aren't connected to Objects.
  * Used for colored text, paintings, and environmental snow and bubbles.
  */
 struct MemoryPool *gEffectsMemoryPool;
+
+uintptr_t sSegmentTable[32];
+u32 sPoolFreeSpace;
+u8 *sPoolStart;
+u8 *sPoolEnd;
+struct MainPoolBlock *sPoolListHeadL;
+struct MainPoolBlock *sPoolListHeadR;
+
 
 static struct MainPoolState *gMainPoolState = NULL;
 
@@ -67,6 +73,7 @@ void *get_segment_base_addr(s32 segment) {
     return (void *) (sSegmentTable[segment] | 0x80000000);
 }
 
+#ifndef NO_SEGMENTED_MEMORY
 void *segmented_to_virtual(const void *addr) {
     size_t segment = (uintptr_t) addr >> 24;
     size_t offset = (uintptr_t) addr & 0x00FFFFFF;
@@ -84,8 +91,20 @@ void move_segment_table_to_dmem(void) {
     s32 i;
 
     for (i = 0; i < 16; i++)
-        gMoveWd(gDisplayListHead++, 6, i * 4, sSegmentTable[i]);
+        gSPSegment(gDisplayListHead++, i, sSegmentTable[i]);
 }
+#else
+void *segmented_to_virtual(const void *addr) {
+    return (void *) addr;
+}
+
+void *virtual_to_segmented(u32 segment, const void *addr) {
+    return (void *) addr;
+}
+
+void move_segment_table_to_dmem(void) {
+}
+#endif
 
 /**
  * Initialize the main memory pool. This pool is conceptually a pair of stacks
@@ -151,14 +170,14 @@ u32 main_pool_free(void *addr) {
         }
         sPoolListHeadL = block;
         sPoolListHeadL->next = NULL;
-        sPoolFreeSpace += (u8 *) oldListHead - (u8 *) sPoolListHeadL;
+        sPoolFreeSpace += (uintptr_t) oldListHead - (uintptr_t) sPoolListHeadL;
     } else {
         while (oldListHead->prev != NULL) {
             oldListHead = oldListHead->prev;
         }
         sPoolListHeadR = block->next;
         sPoolListHeadR->prev = NULL;
-        sPoolFreeSpace += (u8 *) sPoolListHeadR - (u8 *) oldListHead;
+        sPoolFreeSpace += (uintptr_t) sPoolListHeadR - (uintptr_t) oldListHead;
     }
     return sPoolFreeSpace;
 }
@@ -254,6 +273,7 @@ static void *dynamic_dma_read(u8 *srcStart, u8 *srcEnd, u32 side) {
     return dest;
 }
 
+#ifndef NO_SEGMENTED_MEMORY
 /**
  * Load data from ROM into a newly allocated block, and set the segment base
  * address to this block.
@@ -268,9 +288,8 @@ void *load_segment(s32 segment, u8 *srcStart, u8 *srcEnd, u32 side) {
 }
 
 /*
- * Allocate a block of memory starting at destAddr and ending at the righthand
- * end of the memory pool. Then copy srcStart through srcEnd from ROM to this
- * block.
+ * Allocate a block of memory starting at destAddr and ending at the end of
+ * the memory pool. Then copy srcStart through srcEnd from ROM to this block.
  * If this block is not large enough to hold the ROM data, or that portion
  * of the pool is already allocated, return NULL.
  */
@@ -321,7 +340,7 @@ void *load_segment_decompress(s32 segment, u8 *srcStart, u8 *srcEnd) {
     return dest;
 }
 
-void *func_80278304(u32 segment, u8 *srcStart, u8 *srcEnd) {
+void *load_segment_decompress_heap(u32 segment, u8 *srcStart, u8 *srcEnd) {
     UNUSED void *dest = NULL;
     u32 compSize = ALIGN16(srcEnd - srcStart);
     u8 *compressed = main_pool_alloc(compSize, MEMORY_POOL_RIGHT);
@@ -348,6 +367,7 @@ void load_engine_code_segment(void) {
     osInvalICache(startAddr, totalSize);
     osInvalDCache(startAddr, totalSize);
 }
+#endif
 
 /**
  * Allocate an allocation-only pool from the main pool. This pool doesn't
@@ -530,16 +550,17 @@ void func_80278A78(struct MarioAnimation *a, void *b, struct Animation *target) 
     a->targetAnim = target;
 }
 
-s32 func_80278AD4(struct MarioAnimation *a, u32 index) {
+s32 load_patchable_table(struct MarioAnimation *a, u32 index) {
     s32 ret = FALSE;
     struct MarioAnimDmaRelatedThing *sp20 = a->animDmaTable;
     u8 *addr;
     u32 size;
 
     if (index < sp20->count) {
-        addr = sp20->srcAddr + sp20->anim[index].offset;
-        size = sp20->anim[index].size;
-
+        do {
+            addr = sp20->srcAddr + sp20->anim[index].offset;
+            size = sp20->anim[index].size;
+        } while (0);
         if (a->currentAnimAddr != addr) {
             dma_read((u8 *) a->targetAnim, addr, addr + size);
             a->currentAnimAddr = addr;

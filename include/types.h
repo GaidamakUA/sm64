@@ -1,11 +1,23 @@
-#ifndef _TYPES_H_
-#define _TYPES_H_
+#ifndef TYPES_H
+#define TYPES_H
 
 // This file contains various data types used in Super Mario 64 that don't yet
 // have an appropriate header.
 
 #include <ultra64.h>
 #include "macros.h"
+
+
+// Certain functions are marked as having return values, but do not
+// actually return a value. This causes undefined behavior, which we'd rather
+// avoid on modern GCC. This only impacts -O2 and can matter for both the function
+// itself and functions that call it.
+#ifdef AVOID_UB
+    #define BAD_RETURN(cmd) void
+#else
+    #define BAD_RETURN(cmd) cmd
+#endif
+
 
 struct Controller
 {
@@ -18,6 +30,9 @@ struct Controller
   /*0x12*/ u16 buttonPressed;
   /*0x14*/ OSContStatus *statusData;
   /*0x18*/ OSContPad *controllerData;
+#ifdef VERSION_SH
+  /*0x1C*/ int port;
+#endif
 };
 
 typedef f32 Vec2f[2];
@@ -116,7 +131,7 @@ struct GraphNodeObject
     /*0x2C*/ Vec3f scale;
     /*0x38*/ struct GraphNodeObject_sub unk38;
     /*0x4C*/ struct SpawnInfo *unk4C;
-    /*0x50*/ void *throwMatrix; // matrix ptr
+    /*0x50*/ Mat4 *throwMatrix; // matrix ptr
     /*0x54*/ Vec3f cameraToObject;
 };
 
@@ -173,10 +188,10 @@ struct Object
     } ptrData;
 #endif
     /*0x1C8*/ u32 unused1;
-    /*0x1CC*/ const BehaviorScript *behScript;
-    /*0x1D0*/ u32 stackIndex;
-    /*0x1D4*/ uintptr_t stack[8];
-    /*0x1F4*/ s16 unk1F4;
+    /*0x1CC*/ const BehaviorScript *curBhvCommand;
+    /*0x1D0*/ u32 bhvStackIndex;
+    /*0x1D4*/ uintptr_t bhvStack[8];
+    /*0x1F4*/ s16 bhvDelayTimer;
     /*0x1F6*/ s16 respawnInfoType;
     /*0x1F8*/ f32 hitboxRadius;
     /*0x1FC*/ f32 hitboxHeight;
@@ -233,16 +248,16 @@ struct Surface
 struct MarioBodyState
 {
     /*0x00*/ u32 action;
-    /*0x04*/ s8 capState;
+    /*0x04*/ s8 capState; /// see MarioCapGSCId
     /*0x05*/ s8 eyeState;
     /*0x06*/ s8 handState;
-    /*0x07*/ s8 unk07;
+    /*0x07*/ s8 wingFlutter; /// whether Mario's wing cap wings are fluttering
     /*0x08*/ s16 modelState;
     /*0x0A*/ s8 grabPos;
-    /*0x0B*/ u8 unk0B;
-    /*0x0C*/ Vec3s unkC;
-    /*0x12*/ Vec3s unk12;
-    /*0x18*/ Vec3f unk18;
+    /*0x0B*/ u8 punchState; /// 2 bits for type of punch, 6 bits for punch animation timer
+    /*0x0C*/ Vec3s torsoAngle;
+    /*0x12*/ Vec3s headAngle;
+    /*0x18*/ Vec3f heldObjLastPosition; /// also known as HOLP
     u8 padding[4];
 };
 
@@ -325,10 +340,10 @@ struct MarioState
     /*0xB4*/ u8 squishTimer;
     /*0xB5*/ u8 fadeWarpOpacity;
     /*0xB6*/ u16 capTimer;
-    /*0xB8*/ s16 unkB8;
+    /*0xB8*/ s16 prevNumStarsForDialog;
     /*0xBC*/ f32 peakHeight;
     /*0xC0*/ f32 quicksandDepth;
     /*0xC4*/ f32 unkC4;
 };
 
-#endif
+#endif // TYPES_H

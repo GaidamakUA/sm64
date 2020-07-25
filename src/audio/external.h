@@ -1,6 +1,8 @@
 #ifndef AUDIO_EXTERNAL_H
 #define AUDIO_EXTERNAL_H
 
+#include <PR/ultratypes.h>
+
 #include "types.h"
 
 // Sequence arguments, passed to play_sequence. seqId may be bit-OR'ed with
@@ -11,6 +13,10 @@
 #define SOUND_MODE_STEREO           0
 #define SOUND_MODE_MONO             3
 #define SOUND_MODE_HEADSET          1
+
+#define SEQ_PLAYER_LEVEL            0
+#define SEQ_PLAYER_ENV              1
+#define SEQ_PLAYER_SFX              2
 
 extern s32 gAudioErrorFlags;
 extern f32 gDefaultSoundArgs[3];
@@ -33,7 +39,7 @@ void sound_banks_disable(u8 player, u16 bankMask);
 void sound_banks_enable(u8 player, u16 bankMask);
 void func_80320A4C(u8 bankIndex, u8 arg1);
 void play_dialog_sound(u8 dialogID);
-void play_music(u8 player, u16 seqArgs, s16 fadeTimer);
+void play_music(u8 player, u16 seqArgs, u16 fadeTimer);
 void stop_background_music(u16 seqId);
 void fadeout_background_music(u16 arg0, u16 fadeOut);
 void drop_queued_background_music(void);
@@ -48,9 +54,13 @@ void play_star_fanfare(void);
 void play_power_star_jingle(u8 arg0);
 void play_race_fanfare(void);
 void play_toads_jingle(void);
-void sound_reset(u8 arg0);
+void sound_reset(u8 presetId);
 void audio_set_sound_mode(u8 arg0);
 
 void audio_init(void); // in load.c
 
-#endif /* AUDIO_EXTERNAL_H */
+#ifdef VERSION_EU
+struct SPTask *unused_80321460(void);
+#endif
+
+#endif // AUDIO_EXTERNAL_H
